@@ -11,10 +11,10 @@ const ICONS = {
 };
 
 const COLORS = {
-  success: "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400",
-  error: "border-red-500/20 bg-red-500/[0.06] text-red-400",
-  warning: "border-amber-500/20 bg-amber-500/[0.06] text-amber-400",
-  info: "border-blue-500/20 bg-blue-500/[0.06] text-blue-400",
+  success: "border-green-200 bg-green-50 text-green-700",
+  error: "border-red-200 bg-red-50 text-red-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  info: "border-[#d9d7d4] bg-[#f0efed] text-[#2d6a4f]",
 };
 
 let toastId = 0;
@@ -24,7 +24,16 @@ export const ToastProvider = ({ children }) => {
 
   const showToast = useCallback((message, type = "info", duration = 4000) => {
     const id = ++toastId;
-    setToasts((prev) => [...prev, { id, message, type, exiting: false }]);
+    setToasts((prev) => [
+      ...prev,
+      { id, message, type, entering: true, exiting: false },
+    ]);
+
+    setTimeout(() => {
+      setToasts((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, entering: false } : t)),
+      );
+    }, 30);
 
     setTimeout(() => {
       setToasts((prev) =>
@@ -48,23 +57,23 @@ export const ToastProvider = ({ children }) => {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-
-      {/* Toast Container */}
-      <div className="fixed top-20 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      <div className="fixed top-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2 pointer-events-none">
         {toasts.map((toast) => {
           const Icon = ICONS[toast.type];
+          const enteredClass = toast.entering
+            ? "translate-x-full"
+            : "translate-x-0";
+          const exitingClass = toast.exiting ? "opacity-0" : "opacity-100";
           return (
             <div
               key={toast.id}
-              className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl border backdrop-blur-xl ${
-                COLORS[toast.type]
-              } ${toast.exiting ? "toast-exit" : "toast-enter"}`}
+              className={`pointer-events-auto flex items-center gap-3 rounded-xl bg-white border border-[#e8e6e3] shadow-sm px-4 py-3 transition-all duration-300 ${COLORS[toast.type]} ${enteredClass} ${exitingClass}`}
             >
-              <Icon size={18} className="flex-shrink-0 mt-0.5" />
-              <p className="text-sm flex-1">{toast.message}</p>
+              <Icon size={18} className="shrink-0" />
+              <p className="flex-1 text-sm">{toast.message}</p>
               <button
                 onClick={() => removeToast(toast.id)}
-                className="flex-shrink-0 p-0.5 hover:opacity-70 transition-opacity"
+                className="shrink-0 p-0.5 opacity-80 transition-opacity hover:opacity-100"
               >
                 <X size={14} />
               </button>

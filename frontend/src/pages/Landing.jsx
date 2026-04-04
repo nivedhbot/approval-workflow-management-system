@@ -1,21 +1,16 @@
-import Hero from "../components/Hero";
-import Features from "../components/Features";
-import HowItWorks from "../components/HowItWorks";
-import Security from "../components/Security";
-import CTA from "../components/CTA";
-import Footer from "../components/Footer";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 const Landing = () => {
-  return (
-    <main>
-      <Hero />
-      <Features />
-      <HowItWorks />
-      <Security />
-      <CTA />
-      <Footer />
-    </main>
-  );
+  const { user } = useAuth();
+
+  if (user) {
+    const path =
+      user.role === "CREATOR" ? "/dashboard/creator" : "/dashboard/approver";
+    return <Navigate to={path} replace />;
+  }
+
+  return <Navigate to="/login" replace />;
 };
 
 export default Landing;

@@ -1,53 +1,56 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ClipboardList,
+  Inbox,
+  LayoutDashboard,
+  Loader2,
+  PlusCircle,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { requestAPI } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../components/Toast";
 import LoadingSkeleton from "../components/LoadingSkeleton";
-import {
-  Plus,
-  FileText,
-  Loader2,
-  CheckCircle,
-  XCircle,
-  Clock,
-  MessageSquare,
-} from "lucide-react";
+import DashboardLayout from "../components/DashboardLayout";
 
-const STATUS_STYLES = {
-  PENDING: {
-    bg: "bg-amber-500/10",
-    text: "text-amber-400",
-    border: "border-amber-500/20",
-    icon: Clock,
-  },
-  APPROVED: {
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-400",
-    border: "border-emerald-500/20",
-    icon: CheckCircle,
-  },
-  REJECTED: {
-    bg: "bg-red-500/10",
-    text: "text-red-400",
-    border: "border-red-500/20",
-    icon: XCircle,
-  },
+const statusBadge = {
+  PENDING: "bg-amber-50 text-amber-700 border border-amber-200",
+  APPROVED: "bg-green-50 text-green-700 border border-green-200",
+  REJECTED: "bg-red-50 text-red-700 border border-red-200",
+};
+
+const timeAgo = (date) => {
+  const diff = Date.now() - new Date(date);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  return Math.floor(hrs / 24) + "d ago";
 };
 
 const CreatorDashboard = () => {
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const { showToast } = useToast();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  const [activeSection, setActiveSection] = useState("overview");
+  const [filter, setFilter] = useState("ALL");
+  const [expanded, setExpanded] = useState({});
   const [form, setForm] = useState({ title: "", description: "" });
+
+  const links = [
+    { key: "overview", label: "Overview", icon: LayoutDashboard },
+    { key: "new-request", label: "New Request", icon: PlusCircle },
+    { key: "my-requests", label: "My Requests", icon: ClipboardList },
+  ];
 
   const fetchRequests = async () => {
     try {
       setLoading(true);
       const res = await requestAPI.getMyRequests();
-      setRequests(res.data.requests);
+      setRequests(res.data.requests || []);
     } catch (err) {
       showToast(
         err.response?.data?.error || "Failed to load requests",
@@ -62,20 +65,33 @@ const CreatorDashboard = () => {
     fetchRequests();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
+  const stats = useMemo(
+    () => ({
+      total: requests.length,
+      pending: requests.filter((r) => r.status === "PENDING").length,
+      approved: requests.filter((r) => r.status === "APPROVED").length,
+      rejected: requests.filter((r) => r.status === "REJECTED").length,
+    }),
+    [requests],
+  );
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const filteredRequests = useMemo(() => {
+    if (filter === "ALL") return requests;
+    return requests.filter((req) => req.status === filter);
+  }, [filter, requests]);
+
+  const submitRequest = async () => {
+    if (!form.title || !form.description) {
+      showToast("Title and description are required", "error");
+      return;
+    }
+
     setSubmitting(true);
-
     try {
       await requestAPI.create(form);
-      showToast("Request created successfully!", "success");
+      showToast("Request created successfully", "success");
       setForm({ title: "", description: "" });
-      setShowForm(false);
-      fetchRequests();
+      await fetchRequests();
     } catch (err) {
       showToast(
         err.response?.data?.error || "Failed to create request",
@@ -86,201 +102,224 @@ const CreatorDashboard = () => {
     }
   };
 
-  const stats = {
-    total: requests.length,
-    pending: requests.filter((r) => r.status === "PENDING").length,
-    approved: requests.filter((r) => r.status === "APPROVED").length,
-    rejected: requests.filter((r) => r.status === "REJECTED").length,
+  const handleSelectSection = (key) => {
+    setActiveSection(key);
+    const target = document.getElementById(key);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
-    <div className="min-h-screen pt-20 pb-12">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Creator Dashboard</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Welcome back,{" "}
-              <span className="text-gray-400">{user?.username}</span>
-            </p>
-          </div>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-all hover:shadow-lg hover:shadow-blue-600/20"
-          >
-            <Plus size={18} />
-            New Request
-          </button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+    <DashboardLayout
+      title="Creator Dashboard"
+      links={links}
+      activeKey={activeSection}
+      onSelect={handleSelectSection}
+      user={user}
+      onLogout={() => {
+        logout();
+        navigate("/login");
+      }}
+    >
+      <section id="overview" className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: "Total", value: stats.total, color: "text-white" },
-            { label: "Pending", value: stats.pending, color: "text-amber-400" },
+            {
+              label: "Total",
+              value: stats.total,
+              border: "border-l-4 border-l-[#2d6a4f]",
+            },
+            {
+              label: "Pending",
+              value: stats.pending,
+              border: "border-l-4 border-l-amber-400",
+            },
             {
               label: "Approved",
               value: stats.approved,
-              color: "text-emerald-400",
+              border: "border-l-4 border-l-green-400",
             },
-            { label: "Rejected", value: stats.rejected, color: "text-red-400" },
-          ].map((stat) => (
-            <div key={stat.label} className="glass rounded-xl p-4">
-              <p className="text-xs text-gray-500 mb-1">{stat.label}</p>
-              <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+            {
+              label: "Rejected",
+              value: stats.rejected,
+              border: "border-l-4 border-l-red-400",
+            },
+          ].map((card) => (
+            <div
+              key={card.label}
+              className={`rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6 ${card.border}`}
+            >
+              <p className="text-sm text-[#6b6b6b]">{card.label}</p>
+              <p className="mt-2 font-['Sora'] text-3xl font-semibold text-[#1a1a1a]">
+                {card.value}
+              </p>
             </div>
           ))}
         </div>
+      </section>
 
-        {/* Create Form */}
-        {showForm && (
-          <div className="glass rounded-2xl p-6 mb-8 animate-slide-up gradient-border">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <FileText size={20} className="text-blue-400" />
-              Create New Request
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  name="title"
-                  value={form.title}
-                  onChange={handleChange}
-                  placeholder="Enter request title (min 5 characters)"
-                  required
-                  minLength={5}
-                  maxLength={200}
-                  className="w-full px-4 py-2.5 text-sm text-white bg-white/[0.03] border border-white/[0.08] rounded-xl focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 placeholder-gray-600 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  value={form.description}
-                  onChange={handleChange}
-                  placeholder="Describe your request in detail (min 10 characters)"
-                  required
-                  minLength={10}
-                  maxLength={2000}
-                  rows={4}
-                  className="w-full px-4 py-2.5 text-sm text-white bg-white/[0.03] border border-white/[0.08] rounded-xl focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 placeholder-gray-600 resize-y transition-colors"
-                />
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-all disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Plus size={16} />
-                  )}
-                  {submitting ? "Submitting..." : "Submit Request"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="px-5 py-2.5 text-sm font-medium text-gray-400 glass rounded-xl glass-hover"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+      <section
+        id="new-request"
+        className="mt-8 rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6"
+      >
+        <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
+          New Request
+        </h2>
+        <p className="mt-1 text-sm text-[#6b6b6b]">
+          Submit approval requests with clear context.
+        </p>
+
+        <div className="mt-6 space-y-4">
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                Title
+              </label>
+              <span className="text-xs text-[#9b9b9b]">
+                {form.title.length}/200
+              </span>
+            </div>
+            <input
+              type="text"
+              value={form.title}
+              maxLength={200}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, title: e.target.value }))
+              }
+              className="w-full rounded-xl bg-white border border-[#e8e6e3] text-[#1a1a1a] placeholder:text-[#9b9b9b] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+              placeholder="Budget variance request for Q3"
+            />
           </div>
-        )}
 
-        {/* Requests List */}
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-4">My Requests</h2>
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                Description
+              </label>
+              <span className="text-xs text-[#9b9b9b]">
+                {form.description.length}/2000
+              </span>
+            </div>
+            <textarea
+              rows={4}
+              maxLength={2000}
+              value={form.description}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, description: e.target.value }))
+              }
+              className="w-full rounded-xl bg-white border border-[#e8e6e3] text-[#1a1a1a] placeholder:text-[#9b9b9b] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+              placeholder="Summarize the request and expected impact"
+            />
+          </div>
 
+          <button
+            type="button"
+            onClick={submitRequest}
+            disabled={submitting}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#2d6a4f] text-white hover:bg-[#40916c] px-5 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PlusCircle className="h-4 w-4" />
+            )}
+            {submitting ? "Submitting..." : "Submit Request"}
+          </button>
+        </div>
+      </section>
+
+      <section
+        id="my-requests"
+        className="mt-8 rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
+            My Requests
+          </h2>
+          <div className="inline-flex rounded-xl border border-[#e8e6e3] bg-white p-1">
+            {["ALL", "PENDING", "APPROVED", "REJECTED"].map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setFilter(tab)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                  filter === tab
+                    ? "bg-[#2d6a4f]/10 text-[#2d6a4f]"
+                    : "text-[#6b6b6b] hover:bg-[#f0efed]"
+                }`}
+              >
+                {tab === "ALL" ? "All" : tab[0] + tab.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5">
           {loading ? (
-            <LoadingSkeleton rows={3} />
-          ) : requests.length === 0 ? (
-            <div className="glass rounded-2xl p-12 text-center">
-              <FileText size={40} className="text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400 font-medium mb-1">No requests yet</p>
-              <p className="text-sm text-gray-600">
-                Click "New Request" to create your first one
-              </p>
+            <LoadingSkeleton />
+          ) : filteredRequests.length === 0 ? (
+            <div className="text-center py-16 text-[#9b9b9b]">
+              <Inbox className="mx-auto mb-3 h-10 w-10" />
+              <p>No requests here yet</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {requests.map((req) => {
-                const status = STATUS_STYLES[req.status];
-                const StatusIcon = status.icon;
+              {filteredRequests.map((request) => {
+                const isExpanded = expanded[request.id];
                 return (
                   <div
-                    key={req.id}
-                    className="glass rounded-xl p-5 glass-hover group"
+                    key={request.id}
+                    className="rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-5"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-white truncate">
-                          {req.title}
-                        </h3>
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                          {req.description}
-                        </p>
-                      </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="font-semibold text-[#1a1a1a]">
+                        {request.title}
+                      </h3>
                       <span
-                        className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-full ${status.bg} ${status.text} border ${status.border} flex-shrink-0`}
+                        className={`rounded-lg px-2.5 py-1 text-xs font-medium ${statusBadge[request.status]}`}
                       >
-                        <StatusIcon size={12} />
-                        {req.status}
+                        {request.status}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-4 mt-3 text-[11px] text-gray-600">
-                      <span>
-                        Created{" "}
-                        {new Date(req.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </span>
-                      {req.updatedAt !== req.createdAt && (
-                        <span>
-                          Updated{" "}
-                          {new Date(req.updatedAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </span>
-                      )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpanded((prev) => ({
+                          ...prev,
+                          [request.id]: !prev[request.id],
+                        }))
+                      }
+                      className={`mt-3 text-left text-sm text-[#6b6b6b] ${
+                        isExpanded ? "" : "line-clamp-2"
+                      }`}
+                    >
+                      {request.description}
+                    </button>
+
+                    <div className="mt-3 text-xs text-[#9b9b9b]">
+                      Created {timeAgo(request.createdAt)}
                     </div>
 
-                    {req.approvalComments && (
-                      <div className="mt-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.04]">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <MessageSquare size={12} className="text-gray-500" />
-                          <span className="text-[11px] font-medium text-gray-400">
-                            Approver Comments
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-400">
-                          {req.approvalComments}
+                    {(request.status === "APPROVED" ||
+                      request.status === "REJECTED") &&
+                    request.approvalComments ? (
+                      <div className="mt-3 p-3 rounded-lg bg-white border-l-4 border-[#2d6a4f] text-sm text-[#4a4a4a]">
+                        <p className="mb-1 text-xs uppercase tracking-wide text-[#40916c]">
+                          {(request.approverId &&
+                            request.approverId.username) ||
+                            "Approver"}
                         </p>
+                        <p>{request.approvalComments}</p>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </section>
+    </DashboardLayout>
   );
 };
 

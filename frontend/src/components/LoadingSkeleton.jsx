@@ -1,17 +1,16 @@
-const LoadingSkeleton = ({ rows = 3 }) => (
+const heights = ["h-32", "h-40", "h-28"];
+
+const LoadingSkeleton = () => (
   <div className="space-y-4">
-    {Array.from({ length: rows }).map((_, i) => (
-      <div key={i} className="glass rounded-xl p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="skeleton h-4 w-48" />
-          <div className="skeleton h-5 w-20 rounded-full" />
-        </div>
-        <div className="skeleton h-3 w-full mb-2" />
-        <div className="skeleton h-3 w-3/4" />
-        <div className="flex items-center gap-4 mt-4">
-          <div className="skeleton h-3 w-24" />
-          <div className="skeleton h-3 w-20" />
-        </div>
+    {heights.map((height, index) => (
+      <div
+        key={index}
+        className={`animate-pulse rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6 ${height}`}
+      >
+        <div className="mb-4 h-4 w-1/3 rounded-lg bg-[#f0efed]" />
+        <div className="mb-2 h-3 w-full rounded-lg bg-[#f0efed]" />
+        <div className="mb-2 h-3 w-5/6 rounded-lg bg-[#f0efed]" />
+        <div className="h-3 w-2/3 rounded-lg bg-[#f0efed]" />
       </div>
     ))}
   </div>

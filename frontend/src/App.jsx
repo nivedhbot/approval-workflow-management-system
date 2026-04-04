@@ -19,7 +19,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-dark text-white">
+    <div className="min-h-screen bg-[#f5f5f4] text-[#1a1a1a]">
       <Navbar />
       <Routes>
         <Route

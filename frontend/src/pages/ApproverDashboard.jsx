@@ -1,32 +1,60 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle,
+  Clock,
+  Inbox,
+  LayoutDashboard,
+  Loader2,
+  X,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { requestAPI } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../components/Toast";
 import LoadingSkeleton from "../components/LoadingSkeleton";
-import {
-  CheckCircle,
-  XCircle,
-  Clock,
-  ShieldAlert,
-  MessageSquare,
-  Loader2,
-  Inbox,
-  User,
-} from "lucide-react";
+import DashboardLayout from "../components/DashboardLayout";
+
+const timeAgo = (date) => {
+  const diff = Date.now() - new Date(date);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  return Math.floor(hrs / 24) + "d ago";
+};
+
+const statusBadge = {
+  PENDING: "bg-amber-50 text-amber-700 border border-amber-200",
+  APPROVED: "bg-green-50 text-green-700 border border-green-200",
+  REJECTED: "bg-red-50 text-red-700 border border-red-200",
+};
 
 const ApproverDashboard = () => {
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const { showToast } = useToast();
   const [requests, setRequests] = useState([]);
+  const [reviewed, setReviewed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [comments, setComments] = useState({});
+  const [expanded, setExpanded] = useState({});
+  const [activeSection, setActiveSection] = useState("overview");
+  const [reviewFilter, setReviewFilter] = useState("APPROVED");
+
+  const links = [
+    { key: "overview", label: "Overview", icon: LayoutDashboard },
+    { key: "pending", label: "Pending", icon: Clock },
+    { key: "reviewed", label: "Reviewed", icon: CheckCircle },
+  ];
 
   const fetchPending = async () => {
     try {
       setLoading(true);
       const res = await requestAPI.getPending();
-      setRequests(res.data.requests);
+      setRequests(res.data.requests || []);
     } catch (err) {
       showToast(
         err.response?.data?.error || "Failed to load requests",
@@ -41,27 +69,39 @@ const ApproverDashboard = () => {
     fetchPending();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleComment = (id, value) => {
-    setComments((prev) => ({ ...prev, [id]: value }));
+  const isSelfRequest = (request) => {
+    const creatorObjId = request.creatorId?._id;
+    const creatorId = request.creatorId;
+    return creatorObjId === user?.id || creatorId === user?.id;
   };
 
-  const canApprove = (req) => {
-    const creatorId = req.creatorId?._id || req.creatorId;
-    return creatorId?.toString() !== user?.id;
-  };
-
-  const handleAction = async (id, action) => {
-    setActionLoading(`${id}-${action}`);
+  const handleAction = async (request, action) => {
+    const key = `${request.id}-${action}`;
+    setActionLoading(key);
     try {
+      const comment = comments[request.id] || "";
       if (action === "approve") {
-        await requestAPI.approve(id, comments[id] || "");
-        showToast("Request approved successfully!", "success");
+        await requestAPI.approve(request.id, comment);
+        showToast("Request approved", "success");
       } else {
-        await requestAPI.reject(id, comments[id] || "");
-        showToast("Request rejected.", "info");
+        await requestAPI.reject(request.id, comment);
+        showToast("Request rejected", "info");
       }
-      setComments((prev) => ({ ...prev, [id]: "" }));
-      fetchPending();
+
+      const status = action === "approve" ? "APPROVED" : "REJECTED";
+      const updated = {
+        ...request,
+        status,
+        approverId: user?.id,
+        approvalComments: comment,
+      };
+
+      setReviewed((prev) => [
+        updated,
+        ...prev.filter((item) => item.id !== request.id),
+      ]);
+      setComments((prev) => ({ ...prev, [request.id]: "" }));
+      await fetchPending();
     } catch (err) {
       showToast(
         err.response?.data?.error || `Failed to ${action} request`,
@@ -72,138 +112,203 @@ const ApproverDashboard = () => {
     }
   };
 
+  const stats = useMemo(
+    () => ({
+      pending: requests.length,
+      approved: reviewed.filter((r) => r.status === "APPROVED").length,
+      rejected: reviewed.filter((r) => r.status === "REJECTED").length,
+    }),
+    [requests, reviewed],
+  );
+
+  const reviewedByMe = useMemo(
+    () =>
+      reviewed
+        .filter((req) => req.approverId === user?.id)
+        .filter((req) => req.status === reviewFilter),
+    [reviewFilter, reviewed, user?.id],
+  );
+
+  const handleSelectSection = (key) => {
+    setActiveSection(key);
+    const target = document.getElementById(key);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="min-h-screen pt-20 pb-12">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white">Approver Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Welcome back,{" "}
-            <span className="text-gray-400">{user?.username}</span>
-            <span className="mx-2 text-gray-700">·</span>
-            <span className="text-amber-400/80">{requests.length} pending</span>
-          </p>
-        </div>
-
-        {/* Requests */}
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <Clock size={20} className="text-amber-400" />
-            Pending Requests
-          </h2>
-
-          {loading ? (
-            <LoadingSkeleton rows={3} />
-          ) : requests.length === 0 ? (
-            <div className="glass rounded-2xl p-12 text-center">
-              <Inbox size={40} className="text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400 font-medium mb-1">All clear!</p>
-              <p className="text-sm text-gray-600">
-                No pending requests at this time
+    <DashboardLayout
+      title="Approver Dashboard"
+      links={links}
+      activeKey={activeSection}
+      onSelect={handleSelectSection}
+      user={user}
+      onLogout={() => {
+        logout();
+        navigate("/login");
+      }}
+    >
+      <section id="overview" className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {[
+            {
+              label: "Pending",
+              value: stats.pending,
+              border: "border-l-4 border-l-amber-400",
+            },
+            {
+              label: "Approved",
+              value: stats.approved,
+              border: "border-l-4 border-l-green-400",
+            },
+            {
+              label: "Rejected",
+              value: stats.rejected,
+              border: "border-l-4 border-l-red-400",
+            },
+          ].map((card) => (
+            <div
+              key={card.label}
+              className={`rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6 ${card.border}`}
+            >
+              <p className="text-sm text-[#6b6b6b]">{card.label}</p>
+              <p className="mt-2 font-['Sora'] text-3xl font-semibold text-[#1a1a1a]">
+                {card.value}
               </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section
+        id="pending"
+        className="mt-8 rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6"
+      >
+        <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
+          Pending Requests
+        </h2>
+
+        <div className="mt-5">
+          {loading ? (
+            <LoadingSkeleton />
+          ) : requests.length === 0 ? (
+            <div className="text-center py-16 text-[#9b9b9b]">
+              <Inbox className="mx-auto mb-3 h-10 w-10" />
+              <p>No pending requests</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {requests.map((req) => {
-                const isOwn = !canApprove(req);
+              {requests.map((request) => {
+                const creatorName = request.creator?.username || "Unknown";
+                const blocked = isSelfRequest(request);
+                const loadingApprove =
+                  actionLoading === `${request.id}-approve`;
+                const loadingReject = actionLoading === `${request.id}-reject`;
+                const isExpanded = expanded[request.id];
+
                 return (
                   <div
-                    key={req.id}
-                    className={`glass rounded-xl p-5 transition-all ${
-                      isOwn ? "opacity-60" : "glass-hover"
-                    }`}
+                    key={request.id}
+                    className="rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-5"
                   >
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-white">
-                          {req.title}
-                        </h3>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {req.description}
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2d6a4f]/10 text-sm font-semibold text-[#2d6a4f]">
+                        {creatorName[0]?.toUpperCase() || "U"}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[#1a1a1a]">
+                          {creatorName}
+                        </p>
+                        <p className="text-xs text-[#6b6b6b]">
+                          submitted {timeAgo(request.createdAt)}
                         </p>
                       </div>
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full flex-shrink-0">
-                        <Clock size={12} />
-                        PENDING
-                      </span>
                     </div>
 
-                    {/* Meta */}
-                    <div className="flex items-center gap-4 mt-3 text-[11px] text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <User size={11} />
-                        {req.creator?.username || "Unknown"}
-                      </span>
-                      <span>{req.creator?.email || ""}</span>
-                      <span>
-                        {new Date(req.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </span>
-                    </div>
+                    <h3 className="mt-4 text-lg font-semibold text-[#1a1a1a]">
+                      {request.title}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpanded((prev) => ({
+                          ...prev,
+                          [request.id]: !prev[request.id],
+                        }))
+                      }
+                      className={`mt-2 text-left text-sm text-[#6b6b6b] ${isExpanded ? "" : "line-clamp-2"}`}
+                    >
+                      {request.description}
+                    </button>
 
-                    {/* Actions */}
-                    {isOwn ? (
-                      <div className="mt-4 flex items-center gap-2 p-3 rounded-lg bg-amber-500/[0.04] border border-amber-500/10">
-                        <ShieldAlert
-                          size={16}
-                          className="text-amber-400 flex-shrink-0"
-                        />
-                        <p className="text-xs text-amber-400/80">
-                          You cannot approve your own request
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="mt-4 space-y-3">
-                        {/* Comment input */}
-                        <div className="relative">
-                          <MessageSquare
-                            size={14}
-                            className="absolute left-3 top-3 text-gray-600"
-                          />
+                    {request.status === "PENDING" ? (
+                      blocked ? (
+                        <div className="flex items-center gap-2 text-yellow-600 text-sm mt-4">
+                          <AlertTriangle className="w-4 h-4" />
+                          <span>
+                            You submitted this request — cannot action it
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="mt-4 space-y-3">
                           <textarea
-                            placeholder="Add comments (optional)"
-                            value={comments[req.id] || ""}
-                            onChange={(e) =>
-                              handleComment(req.id, e.target.value)
-                            }
-                            maxLength={500}
                             rows={2}
-                            className="w-full pl-9 pr-4 py-2 text-xs text-white bg-white/[0.03] border border-white/[0.08] rounded-xl focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 placeholder-gray-600 resize-none transition-colors"
+                            value={comments[request.id] || ""}
+                            onChange={(e) =>
+                              setComments((prev) => ({
+                                ...prev,
+                                [request.id]: e.target.value,
+                              }))
+                            }
+                            placeholder="Add a comment (optional)..."
+                            className="w-full rounded-xl bg-white border border-[#e8e6e3] text-[#1a1a1a] placeholder:text-[#9b9b9b] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
                           />
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <button
+                              type="button"
+                              onClick={() => handleAction(request, "approve")}
+                              disabled={loadingApprove || loadingReject}
+                              className="flex items-center justify-center gap-2 rounded-xl bg-[#2d6a4f] text-white hover:bg-[#40916c] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {loadingApprove ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4" />
+                              )}
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAction(request, "reject")}
+                              disabled={loadingApprove || loadingReject}
+                              className="flex items-center justify-center gap-2 rounded-xl bg-red-500 text-white hover:bg-red-600 px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {loadingReject ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <X className="h-4 w-4" />
+                              )}
+                              Reject
+                            </button>
+                          </div>
                         </div>
-
-                        {/* Buttons */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleAction(req.id, "approve")}
-                            disabled={actionLoading === `${req.id}-approve`}
-                            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-50"
+                      )
+                    ) : (
+                      <div className="mt-4">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-lg px-2.5 py-1 text-xs font-medium ${statusBadge[request.status]}`}
                           >
-                            {actionLoading === `${req.id}-approve` ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <CheckCircle size={14} />
-                            )}
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => handleAction(req.id, "reject")}
-                            disabled={actionLoading === `${req.id}-reject`}
-                            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors disabled:opacity-50"
-                          >
-                            {actionLoading === `${req.id}-reject` ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <XCircle size={14} />
-                            )}
-                            Reject
-                          </button>
+                            {request.status}
+                          </span>
+                          <span className="rounded-lg border border-[#2d6a4f] bg-[#2d6a4f]/10 px-2.5 py-1 text-xs text-[#2d6a4f]">
+                            Actioned by you
+                          </span>
                         </div>
+                        {request.approvalComments ? (
+                          <div className="mt-3 p-3 rounded-lg bg-white border-l-4 border-[#2d6a4f] text-sm text-[#4a4a4a]">
+                            {request.approvalComments}
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -212,8 +317,74 @@ const ApproverDashboard = () => {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </section>
+
+      <section
+        id="reviewed"
+        className="mt-8 rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
+            Reviewed
+          </h2>
+          <div className="inline-flex rounded-xl border border-[#e8e6e3] bg-white p-1">
+            {["APPROVED", "REJECTED"].map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setReviewFilter(tab)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                  reviewFilter === tab
+                    ? "bg-[#2d6a4f]/10 text-[#2d6a4f]"
+                    : "text-[#6b6b6b] hover:bg-[#f0efed]"
+                }`}
+              >
+                {tab[0] + tab.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {reviewedByMe.length === 0 ? (
+            <div className="text-center py-12 text-[#9b9b9b]">
+              No reviewed requests yet
+            </div>
+          ) : (
+            reviewedByMe.map((request) => (
+              <div
+                key={request.id}
+                className="rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-semibold text-[#1a1a1a]">
+                    {request.title}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-lg px-2.5 py-1 text-xs font-medium ${statusBadge[request.status]}`}
+                    >
+                      {request.status}
+                    </span>
+                    <span className="rounded-lg border border-[#2d6a4f] bg-[#2d6a4f]/10 px-2.5 py-1 text-xs text-[#2d6a4f]">
+                      Actioned by you
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-[#6b6b6b]">
+                  {request.description}
+                </p>
+                {request.approvalComments ? (
+                  <div className="mt-3 p-3 rounded-lg bg-white border-l-4 border-[#2d6a4f] text-sm text-[#4a4a4a]">
+                    {request.approvalComments}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    </DashboardLayout>
   );
 };
 
