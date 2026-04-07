@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   User,
   UserPlus,
+  Users,
   Workflow,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
@@ -34,6 +35,7 @@ const Register = () => {
     email: "",
     password: "",
     role: "CREATOR",
+    teamId: "",
   });
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -56,7 +58,10 @@ const Register = () => {
 
     setLoading(true);
     try {
-      const user = await register(form);
+      const user = await register({
+        ...form,
+        teamId: form.teamId.trim() || "general",
+      });
       showToast("Account created successfully", "success");
       navigate(getDashboardPath(user.role), { replace: true });
     } catch (err) {
@@ -233,6 +238,28 @@ const Register = () => {
                     </p>
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                  Team ID
+                </label>
+                <div className="relative">
+                  <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9b9b9b]" />
+                  <input
+                    type="text"
+                    value={form.teamId}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, teamId: e.target.value }))
+                    }
+                    maxLength={50}
+                    placeholder="finance-north"
+                    className="w-full rounded-xl bg-white border border-[#e8e6e3] px-3 py-3 pl-10 text-sm text-[#1a1a1a] placeholder:text-[#9b9b9b] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-[#9b9b9b]">
+                  Optional. Leave blank to use the default team: general.
+                </p>
               </div>
 
               <button

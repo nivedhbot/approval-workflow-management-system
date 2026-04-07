@@ -33,6 +33,13 @@ const userSchema = new mongoose.Schema({
       message: "Role must be either CREATOR or APPROVER",
     },
   },
+  teamId: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: "general",
+    maxlength: [50, "Team ID cannot exceed 50 characters"],
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -186,6 +186,9 @@ const ApproverDashboard = () => {
         <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
           Pending Requests
         </h2>
+        <p className="mt-1 text-xs text-[#9b9b9b]">
+          Showing requests for team: {user?.teamId || "general"}
+        </p>
 
         <div className="mt-5">
           {loading ? (
@@ -220,6 +223,9 @@ const ApproverDashboard = () => {
                         </p>
                         <p className="text-xs text-[#6b6b6b]">
                           submitted {timeAgo(request.createdAt)}
+                        </p>
+                        <p className="mt-1 text-xs text-[#9b9b9b]">
+                          Team: {request.teamId || "general"}
                         </p>
                       </div>
                     </div>
@@ -373,6 +379,9 @@ const ApproverDashboard = () => {
                 </div>
                 <p className="mt-2 text-sm text-[#6b6b6b]">
                   {request.description}
+                </p>
+                <p className="mt-2 text-xs text-[#9b9b9b]">
+                  Team: {request.teamId || "general"}
                 </p>
                 {request.approvalComments ? (
                   <div className="mt-3 p-3 rounded-lg bg-white border-l-4 border-[#2d6a4f] text-sm text-[#4a4a4a]">

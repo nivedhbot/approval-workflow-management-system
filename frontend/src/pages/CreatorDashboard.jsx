@@ -167,6 +167,9 @@ const CreatorDashboard = () => {
         <p className="mt-1 text-sm text-[#6b6b6b]">
           Submit approval requests with clear context.
         </p>
+        <p className="mt-1 text-xs text-[#9b9b9b]">
+          This request is routed to team: {user?.teamId || "general"}
+        </p>
 
         <div className="mt-6 space-y-4">
           <div>
@@ -297,6 +300,10 @@ const CreatorDashboard = () => {
                     </button>
 
                     <div className="mt-3 text-xs text-[#9b9b9b]">
+                      Team: {request.teamId || user?.teamId || "general"}
+                    </div>
+
+                    <div className="mt-1 text-xs text-[#9b9b9b]">
                       Created {timeAgo(request.createdAt)}
                     </div>
 

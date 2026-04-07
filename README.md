@@ -1,59 +1,102 @@
 # Approval Workflow Management System
 
-A full-stack SaaS application for managing multi-level approval workflows with role-based access control.
+Full-stack approval system with role-based access, JWT authentication, and MongoDB persistence.
 
-## Tech Stack
+## Stack
 
 ### Backend
 
-- **Runtime:** Node.js + Express.js
-- **Database:** MongoDB (Atlas)
-- **Auth:** JWT (JSON Web Tokens)
-- **Security:** bcryptjs password hashing, role-based middleware
+- Node.js, Express
+- MongoDB, Mongoose
+- JWT authentication
+- bcryptjs password hashing
 
 ### Frontend
 
-- **Framework:** React 18 + Vite
-- **Styling:** Tailwind CSS with glassmorphism design
-- **Routing:** React Router v6
-- **HTTP:** Axios with JWT interceptors
+- React 18, Vite
+- React Router v6
+- Axios
+- Tailwind CSS
 
-## Project Structure
+## Repository Structure
 
 ```
-├── backend/          # Express.js REST API
-│   ├── config/       # Database configuration
-│   ├── controllers/  # Route handlers
-│   ├── middleware/    # Auth & role middleware
-│   ├── models/       # Mongoose schemas
-│   └── routes/       # API route definitions
-│
-└── frontend/         # React + Vite SPA
-    └── src/
-        ├── components/  # Reusable UI components
-        ├── context/     # Auth context provider
-        ├── hooks/       # Custom React hooks
-        ├── pages/       # Route page components
-        └── services/    # API service layer
+backend/
+    config/
+    controllers/
+    middleware/
+    models/
+    routes/
+
+frontend/
+    src/
+        components/
+        context/
+        pages/
+        services/
 ```
 
-## Getting Started
+## Core Functionality
 
-### Prerequisites
+- Register and login with role: CREATOR or APPROVER
+- Role-protected API routes and UI routes
+- Request lifecycle: PENDING, APPROVED, REJECTED
+- Self-approval prevention
+- Team-scoped routing of requests using teamId
+
+## Team Scope Behavior
+
+- Users have teamId (default: general)
+- New requests inherit creator teamId
+- Approvers only see pending requests from their own team
+- Approvers cannot approve or reject requests from another team
+
+## API Endpoints
+
+### Auth
+
+- POST /api/auth/register
+- POST /api/auth/login
+- GET /api/auth/me
+
+### Requests
+
+- POST /api/requests (CREATOR)
+- GET /api/requests/my-requests (CREATOR)
+- GET /api/requests/pending (APPROVER)
+- PUT /api/requests/:id/approve (APPROVER)
+- PUT /api/requests/:id/reject (APPROVER)
+
+## Local Setup
+
+### Requirements
 
 - Node.js 18+
-- MongoDB Atlas account (or local MongoDB)
+- MongoDB Atlas URI or local MongoDB
 
-### Backend Setup
+### 1) Backend
 
 ```bash
 cd backend
 npm install
-cp .env.example .env   # Configure your environment variables
+```
+
+Create backend/.env:
+
+```env
+MONGODB_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret
+PORT=5000
+NODE_ENV=development
+```
+
+Run backend:
+
+```bash
 npm start
 ```
 
-### Frontend Setup
+### 2) Frontend
 
 ```bash
 cd frontend
@@ -61,11 +104,9 @@ npm install
 npm run dev
 ```
 
-## Features
+By default, frontend runs on port 3000 and backend on port 5000.
 
-- User registration with role selection (Creator / Approver)
-- JWT-based authentication with auto-refresh
-- Create, track, and manage approval requests
-- Role-based dashboards for creators and approvers
-- Self-approval/rejection prevention
-- Glass morphism SaaS landing page
+## Notes
+
+- JWT and user profile are stored in localStorage keys: fa_token and fa_user
+- Requests and approvals are database-backed (no in-memory state)

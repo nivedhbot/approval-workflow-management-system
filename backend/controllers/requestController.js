@@ -1,4 +1,5 @@
 const Request = require("../models/Request");
+const User = require("../models/User");
 
 // POST /api/requests
 exports.createRequest = async (req, res) => {
@@ -13,10 +14,19 @@ exports.createRequest = async (req, res) => {
       });
     }
 
+    const creator = await User.findById(req.user.id).select("teamId");
+    if (!creator) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
     const request = await Request.create({
       title,
       description,
       creatorId: req.user.id,
+      teamId: creator.teamId || "general",
     });
 
     res.status(201).json({
@@ -27,6 +37,7 @@ exports.createRequest = async (req, res) => {
         title: request.title,
         description: request.description,
         creatorId: request.creatorId,
+        teamId: request.teamId,
         status: request.status,
         createdAt: request.createdAt,
       },
@@ -61,6 +72,7 @@ exports.getMyRequests = async (req, res) => {
         id: r._id,
         title: r.title,
         description: r.description,
+        teamId: r.teamId || "general",
         status: r.status,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
@@ -79,7 +91,21 @@ exports.getMyRequests = async (req, res) => {
 // GET /api/requests/pending
 exports.getPendingRequests = async (req, res) => {
   try {
-    const requests = await Request.find({ status: "PENDING" })
+    const approverTeamId = req.user.teamId || "general";
+    const filter =
+      approverTeamId === "general"
+        ? {
+            status: "PENDING",
+            $or: [
+              { teamId: "general" },
+              { teamId: { $exists: false } },
+              { teamId: null },
+              { teamId: "" },
+            ],
+          }
+        : { status: "PENDING", teamId: approverTeamId };
+
+    const requests = await Request.find(filter)
       .populate("creatorId", "username email")
       .sort({ createdAt: -1 });
 
@@ -90,6 +116,7 @@ exports.getPendingRequests = async (req, res) => {
         id: r._id,
         title: r.title,
         description: r.description,
+        teamId: r.teamId || "general",
         status: r.status,
         creatorId: r.creatorId._id || r.creatorId,
         creator: r.creatorId.username
@@ -139,9 +166,20 @@ exports.approveRequest = async (req, res) => {
       });
     }
 
+    const approverTeamId = req.user.teamId || "general";
+    const requestTeamId = request.teamId || "general";
+
+    if (requestTeamId !== approverTeamId) {
+      return res.status(403).json({
+        success: false,
+        error: "You can only approve requests from your team",
+      });
+    }
+
     // Update request
     request.status = "APPROVED";
     request.approverId = approverId;
+    request.teamId = requestTeamId;
     request.approvalComments = comments || "";
     await request.save();
 
@@ -152,6 +190,7 @@ exports.approveRequest = async (req, res) => {
         id: request._id,
         title: request.title,
         description: request.description,
+        teamId: request.teamId,
         status: request.status,
         approverId: request.approverId,
         approvalComments: request.approvalComments,
@@ -206,9 +245,20 @@ exports.rejectRequest = async (req, res) => {
       });
     }
 
+    const approverTeamId = req.user.teamId || "general";
+    const requestTeamId = request.teamId || "general";
+
+    if (requestTeamId !== approverTeamId) {
+      return res.status(403).json({
+        success: false,
+        error: "You can only reject requests from your team",
+      });
+    }
+
     // Update request
     request.status = "REJECTED";
     request.approverId = approverId;
+    request.teamId = requestTeamId;
     request.approvalComments = comments || "";
     await request.save();
 
@@ -219,6 +269,7 @@ exports.rejectRequest = async (req, res) => {
         id: request._id,
         title: request.title,
         description: request.description,
+        teamId: request.teamId,
         status: request.status,
         approverId: request.approverId,
         approvalComments: request.approvalComments,

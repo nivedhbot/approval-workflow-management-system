@@ -75,6 +75,9 @@ const DashboardLayout = ({
             <span className="mt-1 inline-flex rounded-full bg-[#2d6a4f]/10 px-2 py-0.5 text-xs text-[#40916c]">
               {user?.role || "-"}
             </span>
+            <p className="mt-2 truncate text-xs text-[#6b6b6b]">
+              Team: {user?.teamId || "general"}
+            </p>
             <button
               type="button"
               onClick={onLogout}

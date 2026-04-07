@@ -2,12 +2,19 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
+const normalizeTeamId = (teamId) => {
+  if (!teamId || typeof teamId !== "string") return "general";
+  const normalized = teamId.trim().toLowerCase().replace(/\s+/g, "-");
+  return normalized || "general";
+};
+
 const generateToken = (user) => {
   return jwt.sign(
     {
       id: user._id.toString(),
       username: user.username,
       role: user.role,
+      teamId: user.teamId || "general",
     },
     process.env.JWT_SECRET,
     { expiresIn: "24h" },
@@ -17,7 +24,7 @@ const generateToken = (user) => {
 // POST /api/auth/register
 exports.register = async (req, res) => {
   try {
-    const { username, email, password, role } = req.body;
+    const { username, email, password, role, teamId } = req.body;
 
     // Validate required fields
     if (!username || !email || !password || !role) {
@@ -63,6 +70,7 @@ exports.register = async (req, res) => {
       email: email.toLowerCase(),
       password: hashedPassword,
       role,
+      teamId: normalizeTeamId(teamId),
     });
 
     // Generate token
@@ -77,6 +85,7 @@ exports.register = async (req, res) => {
         username: user.username,
         email: user.email,
         role: user.role,
+        teamId: user.teamId,
       },
     });
   } catch (error) {
@@ -148,6 +157,7 @@ exports.login = async (req, res) => {
         username: user.username,
         email: user.email,
         role: user.role,
+        teamId: user.teamId || "general",
       },
     });
   } catch (error) {
@@ -176,6 +186,7 @@ exports.getMe = async (req, res) => {
         username: user.username,
         email: user.email,
         role: user.role,
+        teamId: user.teamId || "general",
       },
     });
   } catch (error) {

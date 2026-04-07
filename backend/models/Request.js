@@ -21,6 +21,13 @@ const requestSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    teamId: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "general",
+      maxlength: [50, "Team ID cannot exceed 50 characters"],
+    },
     status: {
       type: String,
       enum: ["PENDING", "APPROVED", "REJECTED"],
@@ -44,6 +51,7 @@ const requestSchema = new mongoose.Schema(
 
 requestSchema.index({ creatorId: 1 });
 requestSchema.index({ status: 1 });
+requestSchema.index({ teamId: 1, status: 1 });
 requestSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Request", requestSchema);
