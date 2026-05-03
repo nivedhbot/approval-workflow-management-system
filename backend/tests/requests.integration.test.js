@@ -15,10 +15,14 @@ const registerUser = async (data) => {
 };
 
 const createRequestAs = async (token, data) => {
+  const payload = {
+    category: "BUG_REPORT",
+    ...data,
+  };
   const res = await request(app)
     .post("/api/requests")
     .set("Authorization", `Bearer ${token}`)
-    .send(data);
+    .send(payload);
   return res;
 };
 
@@ -87,6 +91,7 @@ describe("Approval workflow access control", () => {
     const requestDoc = await Request.create({
       title: "Self request",
       description: "This should not be self-approved.",
+      category: "BUG_REPORT",
       creatorId: approver.body.user.id,
       teamId: "alpha",
       status: "PENDING",

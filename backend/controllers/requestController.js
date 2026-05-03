@@ -4,13 +4,28 @@ const User = require("../models/User");
 // POST /api/requests
 exports.createRequest = async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, category, priority, deadline } = req.body;
+    const allowedCategories = [
+      "BUG_REPORT",
+      "SERVER_ISSUE",
+      "DEADLINE_EXTENSION",
+      "FEATURE_REQUEST",
+      "HR_REQUEST",
+      "OTHER",
+    ];
 
     // Validate required fields
     if (!title || !description) {
       return res.status(400).json({
         success: false,
         error: "Title and description are required",
+      });
+    }
+
+    if (!category || !allowedCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid category",
       });
     }
 
@@ -25,6 +40,9 @@ exports.createRequest = async (req, res) => {
     const request = await Request.create({
       title,
       description,
+      category,
+      priority: priority || "MEDIUM",
+      deadline: deadline || null,
       creatorId: req.user.id,
       teamId: creator.teamId || "general",
     });
@@ -36,6 +54,9 @@ exports.createRequest = async (req, res) => {
         id: request._id,
         title: request.title,
         description: request.description,
+        category: request.category,
+        priority: request.priority,
+        deadline: request.deadline,
         creatorId: request.creatorId,
         teamId: request.teamId,
         status: request.status,
@@ -74,6 +95,10 @@ exports.getMyRequests = async (req, res) => {
         description: r.description,
         teamId: r.teamId || "general",
         status: r.status,
+        category: r.category,
+        priority: r.priority,
+        deadline: r.deadline,
+        resolvedAt: r.resolvedAt,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
         approvalComments: r.approvalComments,
@@ -92,6 +117,7 @@ exports.getMyRequests = async (req, res) => {
 exports.getPendingRequests = async (req, res) => {
   try {
     const approverTeamId = req.user.teamId || "general";
+    const { category, priority } = req.query;
     const filter =
       approverTeamId === "general"
         ? {
@@ -105,19 +131,46 @@ exports.getPendingRequests = async (req, res) => {
           }
         : { status: "PENDING", teamId: approverTeamId };
 
+    if (category) {
+      filter.category = category;
+    }
+
+    if (priority) {
+      filter.priority = priority;
+    }
+
+    const priorityOrder = {
+      CRITICAL: 0,
+      HIGH: 1,
+      MEDIUM: 2,
+      LOW: 3,
+    };
+
     const requests = await Request.find(filter)
       .populate("creatorId", "username email")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: 1 });
+
+    const sortedRequests = requests.sort((a, b) => {
+      const aPriority = priorityOrder[a.priority] ?? priorityOrder.MEDIUM;
+      const bPriority = priorityOrder[b.priority] ?? priorityOrder.MEDIUM;
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
 
     res.status(200).json({
       success: true,
-      count: requests.length,
-      requests: requests.map((r) => ({
+      count: sortedRequests.length,
+      requests: sortedRequests.map((r) => ({
         id: r._id,
         title: r.title,
         description: r.description,
         teamId: r.teamId || "general",
         status: r.status,
+        category: r.category,
+        priority: r.priority,
+        deadline: r.deadline,
         creatorId: r.creatorId._id || r.creatorId,
         creator: r.creatorId.username
           ? { username: r.creatorId.username, email: r.creatorId.email }
@@ -214,6 +267,7 @@ exports.approveRequest = async (req, res) => {
         approverId,
         teamId: requestTeamId,
         approvalComments: comments || "",
+        resolvedAt: new Date(),
       },
       { new: true },
     );
@@ -303,6 +357,7 @@ exports.rejectRequest = async (req, res) => {
         approverId,
         teamId: requestTeamId,
         approvalComments: comments || "",
+        resolvedAt: new Date(),
       },
       { new: true },
     );
@@ -336,6 +391,46 @@ exports.rejectRequest = async (req, res) => {
       });
     }
 
+    res.status(500).json({
+      success: false,
+      error: "Server error",
+    });
+  }
+};
+
+// PUT /api/requests/bulk-approve
+exports.bulkApproveRequests = async (req, res) => {
+  try {
+    const { requestIds, comments } = req.body;
+
+    if (!Array.isArray(requestIds) || requestIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Request IDs are required",
+      });
+    }
+
+    const approverTeamId = req.user.teamId || "general";
+
+    const result = await Request.updateMany(
+      {
+        _id: { $in: requestIds },
+        status: "PENDING",
+        teamId: approverTeamId,
+      },
+      {
+        status: "APPROVED",
+        approverId: req.user.id,
+        approvalComments: comments || "",
+        resolvedAt: new Date(),
+      },
+    );
+
+    res.status(200).json({
+      success: true,
+      updatedCount: result.modifiedCount,
+    });
+  } catch (error) {
     res.status(500).json({
       success: false,
       error: "Server error",

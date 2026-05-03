@@ -16,6 +16,31 @@ const requestSchema = new mongoose.Schema(
       minlength: [10, "Description must be at least 10 characters"],
       maxlength: [2000, "Description cannot exceed 2000 characters"],
     },
+    category: {
+      type: String,
+      enum: [
+        "BUG_REPORT",
+        "SERVER_ISSUE",
+        "DEADLINE_EXTENSION",
+        "FEATURE_REQUEST",
+        "HR_REQUEST",
+        "OTHER",
+      ],
+      required: true,
+    },
+    priority: {
+      type: String,
+      enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+      default: "MEDIUM",
+    },
+    deadline: {
+      type: Date,
+      default: null,
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
     creatorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -53,5 +78,7 @@ requestSchema.index({ creatorId: 1 });
 requestSchema.index({ status: 1 });
 requestSchema.index({ teamId: 1, status: 1 });
 requestSchema.index({ createdAt: -1 });
+requestSchema.index({ teamId: 1, category: 1, status: 1 });
+requestSchema.index({ priority: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Request", requestSchema);

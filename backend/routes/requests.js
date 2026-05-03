@@ -21,6 +21,11 @@ router.get(
   roleMiddleware(["APPROVER"]),
   requestController.getPendingRequests,
 );
+router.put(
+  "/bulk-approve",
+  roleMiddleware(["APPROVER"]),
+  requestController.bulkApproveRequests,
+);
 router.get(
   "/reviewed",
   roleMiddleware(["APPROVER"]),
