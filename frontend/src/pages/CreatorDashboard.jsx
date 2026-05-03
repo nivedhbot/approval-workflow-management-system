@@ -14,9 +14,12 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import DashboardLayout from "../components/DashboardLayout";
 
 const statusBadge = {
-  PENDING: "bg-amber-50 text-amber-700 border border-amber-200",
-  APPROVED: "bg-green-50 text-green-700 border border-green-200",
-  REJECTED: "bg-red-50 text-red-700 border border-red-200",
+  PENDING:
+    "rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700",
+  APPROVED:
+    "rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700",
+  REJECTED:
+    "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
 };
 
 const timeAgo = (date) => {
@@ -65,6 +68,10 @@ const CreatorDashboard = () => {
     fetchRequests();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    document.title = "Creator Dashboard | FlowApprove";
+  }, []);
+
   const stats = useMemo(
     () => ({
       total: requests.length,
@@ -74,6 +81,7 @@ const CreatorDashboard = () => {
     }),
     [requests],
   );
+  const allZero = stats.total === 0;
 
   const filteredRequests = useMemo(() => {
     if (filter === "ALL") return requests;
@@ -121,6 +129,17 @@ const CreatorDashboard = () => {
       }}
     >
       <section id="overview" className="space-y-6">
+        <div className="rounded-2xl border border-[#e8e6e3] bg-white p-6 shadow-sm">
+          <p className="text-sm uppercase tracking-[0.3em] text-[#9b9b9b]">
+            Overview
+          </p>
+          <h2 className="mt-2 font-['Sora'] text-2xl font-semibold text-[#1a1a1a]">
+            Welcome, {user?.username || "User"}
+          </h2>
+          <p className="mt-1 text-sm text-[#6b6b6b]">
+            Submit requests for your team approver to review.
+          </p>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             {
@@ -152,6 +171,11 @@ const CreatorDashboard = () => {
               <p className="mt-2 font-['Sora'] text-3xl font-semibold text-[#1a1a1a]">
                 {card.value}
               </p>
+              {allZero && card.label === "Total" ? (
+                <p className="mt-3 text-xs text-[#9b9b9b]">
+                  Create your first request to get started.
+                </p>
+              ) : null}
             </div>
           ))}
         </div>
@@ -262,7 +286,20 @@ const CreatorDashboard = () => {
           ) : filteredRequests.length === 0 ? (
             <div className="text-center py-16 text-[#9b9b9b]">
               <Inbox className="mx-auto mb-3 h-10 w-10" />
-              <p>No requests here yet</p>
+              <p className="text-sm font-medium text-[#6b6b6b]">
+                No requests yet
+              </p>
+              <p className="mt-2 text-xs text-[#9b9b9b]">
+                Create a request to start the approval flow.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleSelectSection("new-request")}
+                className="mx-auto mt-4 inline-flex items-center gap-2 rounded-xl bg-[#2d6a4f] px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-[#40916c]"
+              >
+                <PlusCircle className="h-4 w-4" />
+                New Request
+              </button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -277,9 +314,7 @@ const CreatorDashboard = () => {
                       <h3 className="font-semibold text-[#1a1a1a]">
                         {request.title}
                       </h3>
-                      <span
-                        className={`rounded-lg px-2.5 py-1 text-xs font-medium ${statusBadge[request.status]}`}
-                      >
+                      <span className={statusBadge[request.status]}>
                         {request.status}
                       </span>
                     </div>

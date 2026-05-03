@@ -26,9 +26,12 @@ const timeAgo = (date) => {
 };
 
 const statusBadge = {
-  PENDING: "bg-amber-50 text-amber-700 border border-amber-200",
-  APPROVED: "bg-green-50 text-green-700 border border-green-200",
-  REJECTED: "bg-red-50 text-red-700 border border-red-200",
+  PENDING:
+    "rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700",
+  APPROVED:
+    "rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700",
+  REJECTED:
+    "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
 };
 
 const ApproverDashboard = () => {
@@ -82,7 +85,27 @@ const ApproverDashboard = () => {
     fetchReviewed();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    document.title = "Approver Dashboard | FlowApprove";
+  }, []);
+
   const isSelfRequest = (request) => {
+    <div className="rounded-2xl border border-[#e8e6e3] bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between">
+        <p className="text-sm uppercase tracking-[0.3em] text-[#9b9b9b]">
+          Overview
+        </p>
+        <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+          You are an APPROVER
+        </span>
+      </div>
+      <h2 className="mt-3 font-['Sora'] text-2xl font-semibold text-[#1a1a1a]">
+        Welcome, {user?.username || "User"}
+      </h2>
+      <p className="mt-1 text-sm text-[#6b6b6b]">
+        You are reviewing requests for Team: {user?.teamId || "general"}
+      </p>
+    </div>;
     const creatorObjId = request.creatorId?._id;
     const creatorId = request.creatorId;
     return creatorObjId === user?.id || creatorId === user?.id;
@@ -197,8 +220,13 @@ const ApproverDashboard = () => {
             <LoadingSkeleton />
           ) : requests.length === 0 ? (
             <div className="text-center py-16 text-[#9b9b9b]">
-              <Inbox className="mx-auto mb-3 h-10 w-10" />
-              <p>No pending requests</p>
+              <CheckCircle className="mx-auto mb-3 h-10 w-10" />
+              <p className="text-sm font-medium text-[#6b6b6b]">
+                All caught up — no pending requests
+              </p>
+              <p className="mt-2 text-xs text-[#9b9b9b]">
+                New requests from your team will appear here automatically.
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -303,9 +331,7 @@ const ApproverDashboard = () => {
                     ) : (
                       <div className="mt-4">
                         <div className="flex items-center gap-2">
-                          <span
-                            className={`rounded-lg px-2.5 py-1 text-xs font-medium ${statusBadge[request.status]}`}
-                          >
+                          <span className={statusBadge[request.status]}>
                             {request.status}
                           </span>
                           <span className="rounded-lg border border-[#2d6a4f] bg-[#2d6a4f]/10 px-2.5 py-1 text-xs text-[#2d6a4f]">
@@ -356,7 +382,13 @@ const ApproverDashboard = () => {
         <div className="mt-5 space-y-3">
           {reviewedByMe.length === 0 ? (
             <div className="text-center py-12 text-[#9b9b9b]">
-              No reviewed requests yet
+              <Inbox className="mx-auto mb-3 h-9 w-9" />
+              <p className="text-sm font-medium text-[#6b6b6b]">
+                No reviewed requests yet
+              </p>
+              <p className="mt-2 text-xs text-[#9b9b9b]">
+                Approved or rejected requests will appear here.
+              </p>
             </div>
           ) : (
             reviewedByMe.map((request) => (
@@ -369,9 +401,7 @@ const ApproverDashboard = () => {
                     {request.title}
                   </h3>
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`rounded-lg px-2.5 py-1 text-xs font-medium ${statusBadge[request.status]}`}
-                    >
+                    <span className={statusBadge[request.status]}>
                       {request.status}
                     </span>
                     <span className="rounded-lg border border-[#2d6a4f] bg-[#2d6a4f]/10 px-2.5 py-1 text-xs text-[#2d6a4f]">

@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  CheckCircle,
   Loader2,
   Lock,
   Mail,
-  ShieldCheck,
+  PlusCircle,
   User,
-  UserPlus,
   Users,
   Workflow,
 } from "lucide-react";
@@ -210,12 +210,15 @@ const Register = () => {
                         : "border-[#e8e6e3] bg-white"
                     }`}
                   >
-                    <UserPlus className="h-5 w-5 text-[#2d6a4f]" />
+                    <PlusCircle className="h-5 w-5 text-[#2d6a4f]" />
                     <h3 className="mt-3 font-['Sora'] text-base font-semibold text-[#1a1a1a]">
-                      Creator
+                      CREATOR
                     </h3>
                     <p className="mt-1 text-sm text-[#6b6b6b]">
-                      Submit approval requests
+                      Submit requests for approval
+                    </p>
+                    <p className="mt-2 text-xs text-[#9b9b9b]">
+                      Can submit requests, but cannot review or approve them.
                     </p>
                   </button>
                   <button
@@ -229,12 +232,15 @@ const Register = () => {
                         : "border-[#e8e6e3] bg-white"
                     }`}
                   >
-                    <ShieldCheck className="h-5 w-5 text-[#2d6a4f]" />
+                    <CheckCircle className="h-5 w-5 text-[#2d6a4f]" />
                     <h3 className="mt-3 font-['Sora'] text-base font-semibold text-[#1a1a1a]">
-                      Approver
+                      APPROVER
                     </h3>
                     <p className="mt-1 text-sm text-[#6b6b6b]">
-                      Review and action requests
+                      Review and approve team requests
+                    </p>
+                    <p className="mt-2 text-xs text-[#9b9b9b]">
+                      Can review and approve requests, but cannot create them.
                     </p>
                   </button>
                 </div>
