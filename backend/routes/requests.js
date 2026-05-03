@@ -21,6 +21,11 @@ router.get(
   roleMiddleware(["APPROVER"]),
   requestController.getPendingRequests,
 );
+router.get(
+  "/reviewed",
+  roleMiddleware(["APPROVER"]),
+  requestController.getReviewedRequests,
+);
 router.put(
   "/:id/approve",
   roleMiddleware(["APPROVER"]),

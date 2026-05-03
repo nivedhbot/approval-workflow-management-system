@@ -47,6 +47,7 @@ export const requestAPI = {
   create: (data) => api.post("/requests", data),
   getMyRequests: () => api.get("/requests/my-requests"),
   getPending: () => api.get("/requests/pending"),
+  getReviewed: () => api.get("/requests/reviewed"),
   approve: (id, comments) => api.put(`/requests/${id}/approve`, { comments }),
   reject: (id, comments) => api.put(`/requests/${id}/reject`, { comments }),
 };

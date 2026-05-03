@@ -1,6 +1,9 @@
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const mongoSanitize = require("express-mongo-sanitize");
 const dotenv = require("dotenv");
 const connectDB = require("./config/database");
 
@@ -13,11 +16,24 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+  }),
+);
 app.use(express.json());
+app.use(mongoSanitize());
+
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Routes
-app.use("/api/auth", require("./routes/auth"));
+app.use("/api/auth", authRateLimiter, require("./routes/auth"));
 app.use("/api/requests", require("./routes/requests"));
 
 // Health check
@@ -36,8 +52,10 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== "test") {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 module.exports = app;

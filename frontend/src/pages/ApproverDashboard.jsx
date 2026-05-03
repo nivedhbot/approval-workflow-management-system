@@ -65,8 +65,21 @@ const ApproverDashboard = () => {
     }
   };
 
+  const fetchReviewed = async () => {
+    try {
+      const res = await requestAPI.getReviewed();
+      setReviewed(res.data.requests || []);
+    } catch (err) {
+      showToast(
+        err.response?.data?.error || "Failed to load reviewed requests",
+        "error",
+      );
+    }
+  };
+
   useEffect(() => {
     fetchPending();
+    fetchReviewed();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isSelfRequest = (request) => {
@@ -88,20 +101,9 @@ const ApproverDashboard = () => {
         showToast("Request rejected", "info");
       }
 
-      const status = action === "approve" ? "APPROVED" : "REJECTED";
-      const updated = {
-        ...request,
-        status,
-        approverId: user?.id,
-        approvalComments: comment,
-      };
-
-      setReviewed((prev) => [
-        updated,
-        ...prev.filter((item) => item.id !== request.id),
-      ]);
       setComments((prev) => ({ ...prev, [request.id]: "" }));
       await fetchPending();
+      await fetchReviewed();
     } catch (err) {
       showToast(
         err.response?.data?.error || `Failed to ${action} request`,
@@ -124,7 +126,7 @@ const ApproverDashboard = () => {
   const reviewedByMe = useMemo(
     () =>
       reviewed
-        .filter((req) => req.approverId === user?.id)
+        .filter((req) => (req.approverId?._id || req.approverId) === user?.id)
         .filter((req) => req.status === reviewFilter),
     [reviewFilter, reviewed, user?.id],
   );

@@ -133,6 +133,38 @@ exports.getPendingRequests = async (req, res) => {
   }
 };
 
+// GET /api/requests/reviewed
+exports.getReviewedRequests = async (req, res) => {
+  try {
+    const requests = await Request.find({
+      approverId: req.user.id,
+      status: { $in: ["APPROVED", "REJECTED"] },
+    })
+      .populate("approverId", "username email")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      requests: requests.map((r) => ({
+        id: r._id,
+        title: r.title,
+        description: r.description,
+        teamId: r.teamId || "general",
+        status: r.status,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        approvalComments: r.approvalComments,
+        approverId: r.approverId,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Server error",
+    });
+  }
+};
+
 // PUT /api/requests/:id/approve
 exports.approveRequest = async (req, res) => {
   try {
@@ -140,7 +172,6 @@ exports.approveRequest = async (req, res) => {
     const approverId = req.user.id;
     const { comments } = req.body;
 
-    // Find the request
     const request = await Request.findById(requestId);
 
     if (!request) {
@@ -176,25 +207,36 @@ exports.approveRequest = async (req, res) => {
       });
     }
 
-    // Update request
-    request.status = "APPROVED";
-    request.approverId = approverId;
-    request.teamId = requestTeamId;
-    request.approvalComments = comments || "";
-    await request.save();
+    const updatedRequest = await Request.findOneAndUpdate(
+      { _id: requestId, status: "PENDING" },
+      {
+        status: "APPROVED",
+        approverId,
+        teamId: requestTeamId,
+        approvalComments: comments || "",
+      },
+      { new: true },
+    );
+
+    if (!updatedRequest) {
+      return res.status(400).json({
+        success: false,
+        error: "This request has already been processed",
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: "Request approved successfully",
       request: {
-        id: request._id,
-        title: request.title,
-        description: request.description,
-        teamId: request.teamId,
-        status: request.status,
-        approverId: request.approverId,
-        approvalComments: request.approvalComments,
-        updatedAt: request.updatedAt,
+        id: updatedRequest._id,
+        title: updatedRequest.title,
+        description: updatedRequest.description,
+        teamId: updatedRequest.teamId,
+        status: updatedRequest.status,
+        approverId: updatedRequest.approverId,
+        approvalComments: updatedRequest.approvalComments,
+        updatedAt: updatedRequest.updatedAt,
       },
     });
   } catch (error) {
@@ -219,7 +261,6 @@ exports.rejectRequest = async (req, res) => {
     const approverId = req.user.id;
     const { comments } = req.body;
 
-    // Find the request
     const request = await Request.findById(requestId);
 
     if (!request) {
@@ -255,25 +296,36 @@ exports.rejectRequest = async (req, res) => {
       });
     }
 
-    // Update request
-    request.status = "REJECTED";
-    request.approverId = approverId;
-    request.teamId = requestTeamId;
-    request.approvalComments = comments || "";
-    await request.save();
+    const updatedRequest = await Request.findOneAndUpdate(
+      { _id: requestId, status: "PENDING" },
+      {
+        status: "REJECTED",
+        approverId,
+        teamId: requestTeamId,
+        approvalComments: comments || "",
+      },
+      { new: true },
+    );
+
+    if (!updatedRequest) {
+      return res.status(400).json({
+        success: false,
+        error: "This request has already been processed",
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: "Request rejected successfully",
       request: {
-        id: request._id,
-        title: request.title,
-        description: request.description,
-        teamId: request.teamId,
-        status: request.status,
-        approverId: request.approverId,
-        approvalComments: request.approvalComments,
-        updatedAt: request.updatedAt,
+        id: updatedRequest._id,
+        title: updatedRequest.title,
+        description: updatedRequest.description,
+        teamId: updatedRequest.teamId,
+        status: updatedRequest.status,
+        approverId: updatedRequest.approverId,
+        approvalComments: updatedRequest.approvalComments,
+        updatedAt: updatedRequest.updatedAt,
       },
     });
   } catch (error) {
