@@ -34,6 +34,31 @@ const statusBadge = {
     "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
 };
 
+const priorityBadge = {
+  CRITICAL:
+    "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
+  HIGH: "rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700",
+  MEDIUM:
+    "rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700",
+  LOW: "rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600",
+};
+
+const categoryLabels = {
+  BUG_REPORT: "Bug Report",
+  SERVER_ISSUE: "Server Issue",
+  DEADLINE_EXTENSION: "Deadline Extension",
+  FEATURE_REQUEST: "Feature Request",
+  HR_REQUEST: "HR Request",
+  OTHER: "Other",
+};
+
+const formatDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString();
+};
+
 const ApproverDashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -46,6 +71,10 @@ const ApproverDashboard = () => {
   const [expanded, setExpanded] = useState({});
   const [activeSection, setActiveSection] = useState("overview");
   const [reviewFilter, setReviewFilter] = useState("APPROVED");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [priorityFilter, setPriorityFilter] = useState("ALL");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const links = [
     { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -90,22 +119,6 @@ const ApproverDashboard = () => {
   }, []);
 
   const isSelfRequest = (request) => {
-    <div className="rounded-2xl border border-[#e8e6e3] bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-sm uppercase tracking-[0.3em] text-[#9b9b9b]">
-          Overview
-        </p>
-        <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
-          You are an APPROVER
-        </span>
-      </div>
-      <h2 className="mt-3 font-['Sora'] text-2xl font-semibold text-[#1a1a1a]">
-        Welcome, {user?.username || "User"}
-      </h2>
-      <p className="mt-1 text-sm text-[#6b6b6b]">
-        You are reviewing requests for Team: {user?.teamId || "general"}
-      </p>
-    </div>;
     const creatorObjId = request.creatorId?._id;
     const creatorId = request.creatorId;
     return creatorObjId === user?.id || creatorId === user?.id;
@@ -140,11 +153,50 @@ const ApproverDashboard = () => {
   const stats = useMemo(
     () => ({
       pending: requests.length,
-      approved: reviewed.filter((r) => r.status === "APPROVED").length,
-      rejected: reviewed.filter((r) => r.status === "REJECTED").length,
+      critical: requests.filter((r) => r.priority === "CRITICAL").length,
+      high: requests.filter((r) => r.priority === "HIGH").length,
     }),
-    [requests, reviewed],
+    [requests],
   );
+
+  const filteredPending = useMemo(() => {
+    return requests.filter((request) => {
+      if (categoryFilter !== "ALL" && request.category !== categoryFilter) {
+        return false;
+      }
+      if (priorityFilter !== "ALL" && request.priority !== priorityFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [categoryFilter, priorityFilter, requests]);
+
+  const toggleSelected = (requestId) => {
+    setSelectedIds((prev) =>
+      prev.includes(requestId)
+        ? prev.filter((id) => id !== requestId)
+        : [...prev, requestId],
+    );
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkLoading(true);
+    try {
+      await requestAPI.bulkApprove(selectedIds, comments.bulk || "");
+      showToast("Requests approved", "success");
+      setSelectedIds([]);
+      await fetchPending();
+      await fetchReviewed();
+    } catch (err) {
+      showToast(
+        err.response?.data?.error || "Failed to bulk approve requests",
+        "error",
+      );
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   const reviewedByMe = useMemo(
     () =>
@@ -173,22 +225,35 @@ const ApproverDashboard = () => {
       }}
     >
       <section id="overview" className="space-y-6">
+        <div className="rounded-2xl border border-[#e8e6e3] bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
+              You are reviewing requests for {user?.teamId || "general"} team
+            </h2>
+            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+              APPROVER
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-[#6b6b6b]">
+            Prioritize urgent requests and keep your team moving.
+          </p>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {[
             {
-              label: "Pending",
+              label: "Total Pending",
               value: stats.pending,
               border: "border-l-4 border-l-amber-400",
             },
             {
-              label: "Approved",
-              value: stats.approved,
-              border: "border-l-4 border-l-green-400",
+              label: "Critical",
+              value: stats.critical,
+              border: "border-l-4 border-l-red-400",
             },
             {
-              label: "Rejected",
-              value: stats.rejected,
-              border: "border-l-4 border-l-red-400",
+              label: "High",
+              value: stats.high,
+              border: "border-l-4 border-l-orange-400",
             },
           ].map((card) => (
             <div
@@ -215,10 +280,96 @@ const ApproverDashboard = () => {
           Showing requests for team: {user?.teamId || "general"}
         </p>
 
+        <div className="mt-5 space-y-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+              Category
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[
+                { label: "All", value: "ALL" },
+                { label: "Bug Report", value: "BUG_REPORT" },
+                { label: "Server Issue", value: "SERVER_ISSUE" },
+                { label: "Deadline Extension", value: "DEADLINE_EXTENSION" },
+                { label: "Feature Request", value: "FEATURE_REQUEST" },
+                { label: "HR Request", value: "HR_REQUEST" },
+              ].map((option) => {
+                const active = categoryFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setCategoryFilter(option.value)}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
+                      active
+                        ? "border-[#2d6a4f] bg-[#2d6a4f]/10 text-[#2d6a4f]"
+                        : "border-[#e8e6e3] bg-white text-[#6b6b6b] hover:bg-[#f0efed]"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+              Priority
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[
+                { label: "All", value: "ALL" },
+                { label: "Critical", value: "CRITICAL" },
+                { label: "High", value: "HIGH" },
+                { label: "Medium", value: "MEDIUM" },
+                { label: "Low", value: "LOW" },
+              ].map((option) => {
+                const active = priorityFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setPriorityFilter(option.value)}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
+                      active
+                        ? "border-[#2d6a4f] bg-[#2d6a4f]/10 text-[#2d6a4f]"
+                        : "border-[#e8e6e3] bg-white text-[#6b6b6b] hover:bg-[#f0efed]"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedIds.length > 0 ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-[#e8e6e3] bg-white p-3">
+              <p className="text-xs text-[#6b6b6b]">
+                {selectedIds.length} selected
+              </p>
+              <button
+                type="button"
+                onClick={handleBulkApprove}
+                disabled={bulkLoading}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#2d6a4f] px-4 py-2 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-[#40916c] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+                Bulk Approve Selected
+              </button>
+            </div>
+          ) : null}
+        </div>
+
         <div className="mt-5">
           {loading ? (
             <LoadingSkeleton />
-          ) : requests.length === 0 ? (
+          ) : filteredPending.length === 0 ? (
             <div className="text-center py-16 text-[#9b9b9b]">
               <CheckCircle className="mx-auto mb-3 h-10 w-10" />
               <p className="text-sm font-medium text-[#6b6b6b]">
@@ -230,20 +381,46 @@ const ApproverDashboard = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {requests.map((request) => {
+              {filteredPending.map((request) => {
                 const creatorName = request.creator?.username || "Unknown";
                 const blocked = isSelfRequest(request);
                 const loadingApprove =
                   actionLoading === `${request.id}-approve`;
                 const loadingReject = actionLoading === `${request.id}-reject`;
                 const isExpanded = expanded[request.id];
+                const isCritical = request.priority === "CRITICAL";
+                const isSelected = selectedIds.includes(request.id);
 
                 return (
                   <div
                     key={request.id}
-                    className="rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-5"
+                    className={`rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-5 ${
+                      isCritical ? "border-l-4 border-l-red-500" : ""
+                    }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 text-xs text-[#6b6b6b]">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelected(request.id)}
+                          className="h-4 w-4 rounded border-[#e8e6e3] text-[#2d6a4f] focus:ring-[#2d6a4f]"
+                        />
+                        Select
+                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {request.priority ? (
+                          <span className={priorityBadge[request.priority]}>
+                            {request.priority}
+                          </span>
+                        ) : null}
+                        <span className="rounded-full border border-[#e8e6e3] bg-white px-2.5 py-1 text-xs text-[#6b6b6b]">
+                          {categoryLabels[request.category] || "Other"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2d6a4f]/10 text-sm font-semibold text-[#2d6a4f]">
                         {creatorName[0]?.toUpperCase() || "U"}
                       </div>
@@ -254,9 +431,11 @@ const ApproverDashboard = () => {
                         <p className="text-xs text-[#6b6b6b]">
                           submitted {timeAgo(request.createdAt)}
                         </p>
-                        <p className="mt-1 text-xs text-[#9b9b9b]">
-                          Team: {request.teamId || "general"}
-                        </p>
+                        {request.deadline ? (
+                          <p className="mt-1 text-xs text-[#9b9b9b]">
+                            Due: {formatDate(request.deadline)}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
 

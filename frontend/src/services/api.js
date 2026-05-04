@@ -50,6 +50,8 @@ export const requestAPI = {
   getReviewed: () => api.get("/requests/reviewed"),
   approve: (id, comments) => api.put(`/requests/${id}/approve`, { comments }),
   reject: (id, comments) => api.put(`/requests/${id}/reject`, { comments }),
+  bulkApprove: (requestIds, comments) =>
+    api.put("/requests/bulk-approve", { requestIds, comments }),
 };
 
 export default api;

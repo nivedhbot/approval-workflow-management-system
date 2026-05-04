@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  CheckCircle,
   Loader2,
   Lock,
   Mail,
   PlusCircle,
+  ShieldCheck,
   User,
   Users,
   Workflow,
@@ -212,14 +212,16 @@ const Register = () => {
                   >
                     <PlusCircle className="h-5 w-5 text-[#2d6a4f]" />
                     <h3 className="mt-3 font-['Sora'] text-base font-semibold text-[#1a1a1a]">
-                      CREATOR
+                      Creator
                     </h3>
                     <p className="mt-1 text-sm text-[#6b6b6b]">
-                      Submit requests for approval
+                      Submit requests for your team
                     </p>
-                    <p className="mt-2 text-xs text-[#9b9b9b]">
-                      Can submit requests, but cannot review or approve them.
-                    </p>
+                    <ul className="mt-3 space-y-1 text-xs text-[#9b9b9b]">
+                      <li>Submit Bug Reports & Server Issues</li>
+                      <li>Request Deadline Extensions</li>
+                      <li>Track status of all your requests</li>
+                    </ul>
                   </button>
                   <button
                     type="button"
@@ -232,16 +234,18 @@ const Register = () => {
                         : "border-[#e8e6e3] bg-white"
                     }`}
                   >
-                    <CheckCircle className="h-5 w-5 text-[#2d6a4f]" />
+                    <ShieldCheck className="h-5 w-5 text-[#2d6a4f]" />
                     <h3 className="mt-3 font-['Sora'] text-base font-semibold text-[#1a1a1a]">
-                      APPROVER
+                      Approver
                     </h3>
                     <p className="mt-1 text-sm text-[#6b6b6b]">
-                      Review and approve team requests
+                      Review and resolve team requests
                     </p>
-                    <p className="mt-2 text-xs text-[#9b9b9b]">
-                      Can review and approve requests, but cannot create them.
-                    </p>
+                    <ul className="mt-3 space-y-1 text-xs text-[#9b9b9b]">
+                      <li>Review incoming requests by priority</li>
+                      <li>Bulk approve low-priority items</li>
+                      <li>Full visibility into team workload</li>
+                    </ul>
                   </button>
                 </div>
               </div>

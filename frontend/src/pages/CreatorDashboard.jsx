@@ -22,6 +22,31 @@ const statusBadge = {
     "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
 };
 
+const priorityBadge = {
+  CRITICAL:
+    "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
+  HIGH: "rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700",
+  MEDIUM:
+    "rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700",
+  LOW: "rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600",
+};
+
+const categoryLabels = {
+  BUG_REPORT: "Bug Report",
+  SERVER_ISSUE: "Server Issue",
+  DEADLINE_EXTENSION: "Deadline Extension",
+  FEATURE_REQUEST: "Feature Request",
+  HR_REQUEST: "HR Request",
+  OTHER: "Other",
+};
+
+const formatDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString();
+};
+
 const timeAgo = (date) => {
   const diff = Date.now() - new Date(date);
   const mins = Math.floor(diff / 60000);
@@ -238,6 +263,96 @@ const CreatorDashboard = () => {
             />
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                Category
+              </label>
+              <select
+                value={form.category}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, category: e.target.value }))
+                }
+                className="w-full rounded-xl bg-white border border-[#e8e6e3] text-[#1a1a1a] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+              >
+                <option value="BUG_REPORT">Bug Report</option>
+                <option value="SERVER_ISSUE">Server Issue</option>
+                <option value="DEADLINE_EXTENSION">Deadline Extension</option>
+                <option value="FEATURE_REQUEST">Feature Request</option>
+                <option value="HR_REQUEST">HR Request</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                Deadline (optional)
+              </label>
+              <input
+                type="date"
+                value={form.deadline || ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    deadline: e.target.value || null,
+                  }))
+                }
+                className="w-full rounded-xl bg-white border border-[#e8e6e3] text-[#1a1a1a] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+              Priority
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                {
+                  value: "LOW",
+                  label: "LOW",
+                  classes: "border-slate-200 text-slate-600 hover:bg-slate-50",
+                  active: "bg-slate-100",
+                },
+                {
+                  value: "MEDIUM",
+                  label: "MEDIUM",
+                  classes: "border-blue-200 text-blue-700 hover:bg-blue-50",
+                  active: "bg-blue-100",
+                },
+                {
+                  value: "HIGH",
+                  label: "HIGH",
+                  classes:
+                    "border-orange-200 text-orange-700 hover:bg-orange-50",
+                  active: "bg-orange-100",
+                },
+                {
+                  value: "CRITICAL",
+                  label: "CRITICAL",
+                  classes: "border-red-200 text-red-700 hover:bg-red-50",
+                  active: "bg-red-100",
+                },
+              ].map((option) => {
+                const active = form.priority === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({ ...prev, priority: option.value }))
+                    }
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${option.classes} ${
+                      active ? option.active : "bg-white"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={submitRequest}
@@ -303,7 +418,7 @@ const CreatorDashboard = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredRequests.map((request) => {
+              {displayedRequests.map((request) => {
                 const isExpanded = expanded[request.id];
                 return (
                   <div
@@ -314,9 +429,27 @@ const CreatorDashboard = () => {
                       <h3 className="font-semibold text-[#1a1a1a]">
                         {request.title}
                       </h3>
-                      <span className={statusBadge[request.status]}>
-                        {request.status}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={statusBadge[request.status]}>
+                          {request.status}
+                        </span>
+                        {request.priority ? (
+                          <span className={priorityBadge[request.priority]}>
+                            {request.priority}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#6b6b6b]">
+                      <span className="rounded-full border border-[#e8e6e3] bg-white px-2.5 py-1">
+                        {categoryLabels[request.category] || "Other"}
                       </span>
+                      {request.deadline ? (
+                        <span className="rounded-full border border-[#e8e6e3] bg-white px-2.5 py-1">
+                          Due: {formatDate(request.deadline)}
+                        </span>
+                      ) : null}
                     </div>
 
                     <button
@@ -341,6 +474,14 @@ const CreatorDashboard = () => {
                     <div className="mt-1 text-xs text-[#9b9b9b]">
                       Created {timeAgo(request.createdAt)}
                     </div>
+
+                    {(request.status === "APPROVED" ||
+                      request.status === "REJECTED") &&
+                    request.resolvedAt ? (
+                      <div className="mt-1 text-xs text-[#9b9b9b]">
+                        Resolved {timeAgo(request.resolvedAt)}
+                      </div>
+                    ) : null}
 
                     {(request.status === "APPROVED" ||
                       request.status === "REJECTED") &&

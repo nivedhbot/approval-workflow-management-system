@@ -18,6 +18,12 @@ const DashboardLayout = ({
       : roleLabel === "APPROVER"
         ? "border-blue-200 bg-blue-100 text-blue-800"
         : "border-slate-200 bg-slate-100 text-slate-700";
+  const roleDescription =
+    roleLabel === "CREATOR"
+      ? "Submit & track requests"
+      : roleLabel === "APPROVER"
+        ? "Review & resolve team requests"
+        : "Team workflow role";
   const displayName = user?.username || "User";
   const displayEmail = user?.email || "email not set";
   const displayTeam = user?.teamId || "general";
@@ -52,6 +58,7 @@ const DashboardLayout = ({
                 <X className="h-4 w-4" />
               </button>
             </div>
+            <p className="mt-2 text-xs text-[#6b6b6b]">{roleDescription}</p>
             <p className="mt-3 text-base font-semibold text-[#1a1a1a]">
               {displayName}
             </p>
