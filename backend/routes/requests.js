@@ -31,6 +31,11 @@ router.get(
   roleMiddleware(["APPROVER"]),
   requestController.getReviewedRequests,
 );
+router.get(
+  "/auto-rejected",
+  roleMiddleware(["APPROVER"]),
+  requestController.getAutoRejectedRequests,
+);
 router.put(
   "/:id/approve",
   roleMiddleware(["APPROVER"]),

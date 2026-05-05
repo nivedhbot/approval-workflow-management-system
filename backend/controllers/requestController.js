@@ -1,10 +1,18 @@
 const Request = require("../models/Request");
 const User = require("../models/User");
+const autoCheckService = require("../services/autoCheckService");
 
 // POST /api/requests
 exports.createRequest = async (req, res) => {
   try {
-    const { title, description, category, priority, deadline } = req.body;
+    const {
+      title,
+      description,
+      category,
+      priority,
+      deadline,
+      requestedAmount,
+    } = req.body;
     const allowedCategories = [
       "BUG_REPORT",
       "SERVER_ISSUE",
@@ -29,7 +37,9 @@ exports.createRequest = async (req, res) => {
       });
     }
 
-    const creator = await User.findById(req.user.id).select("teamId");
+    const creator = await User.findById(req.user.id).select(
+      "teamId budgetLimit",
+    );
     if (!creator) {
       return res.status(404).json({
         success: false,
@@ -43,9 +53,19 @@ exports.createRequest = async (req, res) => {
       category,
       priority: priority || "MEDIUM",
       deadline: deadline || null,
+      requestedAmount: requestedAmount || 0,
       creatorId: req.user.id,
       teamId: creator.teamId || "general",
     });
+
+    const checkResult = await autoCheckService.runAutoChecks(request, creator);
+    request.autoCheckStatus = checkResult.status;
+    request.autoCheckReason = checkResult.reason;
+    request.autoCheckedAt = new Date();
+    if (!checkResult.passed) {
+      request.status = "AUTO_REJECTED";
+    }
+    await request.save();
 
     res.status(201).json({
       success: true,
@@ -57,6 +77,9 @@ exports.createRequest = async (req, res) => {
         category: request.category,
         priority: request.priority,
         deadline: request.deadline,
+        requestedAmount: request.requestedAmount,
+        autoCheckStatus: request.autoCheckStatus,
+        autoCheckReason: request.autoCheckReason,
         creatorId: request.creatorId,
         teamId: request.teamId,
         status: request.status,
@@ -122,6 +145,7 @@ exports.getPendingRequests = async (req, res) => {
       approverTeamId === "general"
         ? {
             status: "PENDING",
+            autoCheckStatus: "PASSED",
             $or: [
               { teamId: "general" },
               { teamId: { $exists: false } },
@@ -129,7 +153,11 @@ exports.getPendingRequests = async (req, res) => {
               { teamId: "" },
             ],
           }
-        : { status: "PENDING", teamId: approverTeamId };
+        : {
+            status: "PENDING",
+            autoCheckStatus: "PASSED",
+            teamId: approverTeamId,
+          };
 
     if (category) {
       filter.category = category;
@@ -171,6 +199,8 @@ exports.getPendingRequests = async (req, res) => {
         category: r.category,
         priority: r.priority,
         deadline: r.deadline,
+        autoCheckStatus: r.autoCheckStatus,
+        requestedAmount: r.requestedAmount,
         creatorId: r.creatorId._id || r.creatorId,
         creator: r.creatorId.username
           ? { username: r.creatorId.username, email: r.creatorId.email }
@@ -435,5 +465,37 @@ exports.bulkApproveRequests = async (req, res) => {
       success: false,
       error: "Server error",
     });
+  }
+};
+
+// GET /api/requests/auto-rejected
+exports.getAutoRejectedRequests = async (req, res) => {
+  try {
+    const approverTeamId = req.user.teamId || "general";
+    const requests = await Request.find({
+      teamId: approverTeamId,
+      autoCheckStatus: { $in: ["DUPLICATE", "AI_REJECTED", "BUDGET_EXCEEDED"] },
+    })
+      .populate("creatorId", "username email")
+      .sort({ autoCheckedAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: requests.length,
+      requests: requests.map((r) => ({
+        id: r._id,
+        title: r.title,
+        category: r.category,
+        priority: r.priority,
+        autoCheckStatus: r.autoCheckStatus,
+        autoCheckReason: r.autoCheckReason,
+        autoCheckedAt: r.autoCheckedAt,
+        requestedAmount: r.requestedAmount,
+        creator: r.creatorId ? { username: r.creatorId.username } : null,
+        createdAt: r.createdAt,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Server error" });
   }
 };

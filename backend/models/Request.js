@@ -55,7 +55,7 @@ const requestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["PENDING", "APPROVED", "REJECTED"],
+      enum: ["PENDING", "APPROVED", "REJECTED", "AUTO_REJECTED"],
       default: "PENDING",
     },
     approverId: {
@@ -66,6 +66,29 @@ const requestSchema = new mongoose.Schema(
     approvalComments: {
       type: String,
       maxlength: [500, "Comments cannot exceed 500 characters"],
+      default: null,
+    },
+    requestedAmount: {
+      type: Number,
+      default: 0,
+    },
+    autoCheckStatus: {
+      type: String,
+      enum: [
+        "PENDING_CHECK",
+        "PASSED",
+        "DUPLICATE",
+        "AI_REJECTED",
+        "BUDGET_EXCEEDED",
+      ],
+      default: "PENDING_CHECK",
+    },
+    autoCheckReason: {
+      type: String,
+      default: "",
+    },
+    autoCheckedAt: {
+      type: Date,
       default: null,
     },
   },
@@ -80,5 +103,6 @@ requestSchema.index({ teamId: 1, status: 1 });
 requestSchema.index({ createdAt: -1 });
 requestSchema.index({ teamId: 1, category: 1, status: 1 });
 requestSchema.index({ priority: 1, createdAt: -1 });
+requestSchema.index({ autoCheckStatus: 1, teamId: 1 });
 
 module.exports = mongoose.model("Request", requestSchema);

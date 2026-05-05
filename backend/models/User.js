@@ -40,6 +40,10 @@ const userSchema = new mongoose.Schema({
     default: "general",
     maxlength: [50, "Team ID cannot exceed 50 characters"],
   },
+  budgetLimit: {
+    type: Number,
+    default: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -180,3 +180,97 @@ describe("Approval workflow access control", () => {
     expect(secondApprove.status).toBe(400);
   });
 });
+
+jest.mock("openai", () => {
+  return function OpenAI() {
+    return {
+      chat: {
+        completions: {
+          create: jest.fn().mockResolvedValue({
+            choices: [
+              {
+                message: {
+                  content: '{"verdict":"PASS","reason":"ok"}',
+                },
+              },
+            ],
+          }),
+        },
+      },
+    };
+  };
+});
+
+describe("Auto-check validation", () => {
+  test("Duplicate request is auto-rejected", async () => {
+    const creator = await registerUser({
+      username: "creator-auto-1",
+      email: "creator-auto-1@example.com",
+      password: "Password1!",
+      role: "CREATOR",
+      teamId: "alpha",
+    });
+
+    const first = await createRequestAs(creator.body.token, {
+      title: "Bug report alpha",
+      description: "Same bug report request.",
+      category: "BUG_REPORT",
+    });
+
+    expect(first.status).toBe(201);
+
+    const second = await createRequestAs(creator.body.token, {
+      title: "Bug report alpha",
+      description: "Same bug report request.",
+      category: "BUG_REPORT",
+    });
+
+    expect(second.status).toBe(201);
+    expect(second.body.request.autoCheckStatus).toBe("DUPLICATE");
+    expect(second.body.request.status).toBe("AUTO_REJECTED");
+  });
+
+  test("Budget exceeded is auto-rejected", async () => {
+    const creator = await registerUser({
+      username: "creator-auto-2",
+      email: "creator-auto-2@example.com",
+      password: "Password1!",
+      role: "CREATOR",
+      teamId: "beta",
+    });
+
+    await User.findByIdAndUpdate(creator.body.user.id, { budgetLimit: 100 });
+
+    const res = await createRequestAs(creator.body.token, {
+      title: "Large budget request",
+      description: "This exceeds the budget limit.",
+      category: "FEATURE_REQUEST",
+      requestedAmount: 500,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.request.autoCheckStatus).toBe("BUDGET_EXCEEDED");
+    expect(res.body.request.status).toBe("AUTO_REJECTED");
+  });
+
+  test("Clean request passes all checks", async () => {
+    const creator = await registerUser({
+      username: "creator-auto-3",
+      email: "creator-auto-3@example.com",
+      password: "Password1!",
+      role: "CREATOR",
+      teamId: "gamma",
+    });
+
+    const res = await createRequestAs(creator.body.token, {
+      title: "Unique ops request",
+      description: "A clear request with enough details for review.",
+      category: "SERVER_ISSUE",
+      requestedAmount: 0,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.request.autoCheckStatus).toBe("PASSED");
+    expect(res.body.request.status).toBe("PENDING");
+  });
+});
