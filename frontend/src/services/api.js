@@ -52,6 +52,7 @@ export const requestAPI = {
   reject: (id, comments) => api.put(`/requests/${id}/reject`, { comments }),
   bulkApprove: (requestIds, comments) =>
     api.put("/requests/bulk-approve", { requestIds, comments }),
+  getAutoRejected: () => api.get("/requests/auto-rejected"),
 };
 
 export default api;

@@ -66,7 +66,14 @@ const CreatorDashboard = () => {
   const [activeSection, setActiveSection] = useState("overview");
   const [filter, setFilter] = useState("ALL");
   const [expanded, setExpanded] = useState({});
-  const [form, setForm] = useState({ title: "", description: "" });
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    category: "OTHER",
+    priority: "MEDIUM",
+    deadline: null,
+    requestedAmount: "",
+  });
 
   const links = [
     { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -113,6 +120,20 @@ const CreatorDashboard = () => {
     return requests.filter((req) => req.status === filter);
   }, [filter, requests]);
 
+  const priorityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+  const displayedRequests = useMemo(() => {
+    return [...filteredRequests].sort((a, b) => {
+      const aStatus = a.status === "PENDING" ? 0 : 1;
+      const bStatus = b.status === "PENDING" ? 0 : 1;
+      if (aStatus !== bStatus) return aStatus - bStatus;
+      const aPriority = priorityOrder[a.priority] ?? priorityOrder.MEDIUM;
+      const bPriority = priorityOrder[b.priority] ?? priorityOrder.MEDIUM;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+  }, [filteredRequests]);
+
   const submitRequest = async () => {
     if (!form.title || !form.description) {
       showToast("Title and description are required", "error");
@@ -121,9 +142,25 @@ const CreatorDashboard = () => {
 
     setSubmitting(true);
     try {
-      await requestAPI.create(form);
+      await requestAPI.create({
+        title: form.title,
+        description: form.description,
+        category: form.category,
+        priority: form.priority,
+        deadline: form.deadline || null,
+        requestedAmount: form.requestedAmount
+          ? Number(form.requestedAmount)
+          : 0,
+      });
       showToast("Request created successfully", "success");
-      setForm({ title: "", description: "" });
+      setForm({
+        title: "",
+        description: "",
+        category: "OTHER",
+        priority: "MEDIUM",
+        deadline: null,
+        requestedAmount: "",
+      });
       await fetchRequests();
     } catch (err) {
       showToast(
@@ -300,6 +337,25 @@ const CreatorDashboard = () => {
                 className="w-full rounded-xl bg-white border border-[#e8e6e3] text-[#1a1a1a] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
               />
             </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                Requested Amount (₹) — optional
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={form.requestedAmount}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    requestedAmount: e.target.value,
+                  }))
+                }
+                className="w-full rounded-xl bg-white border border-[#e8e6e3] text-[#1a1a1a] placeholder:text-[#9b9b9b] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                placeholder="0"
+              />
+            </div>
           </div>
 
           <div>
@@ -438,7 +494,34 @@ const CreatorDashboard = () => {
                             {request.priority}
                           </span>
                         ) : null}
+                        {request.autoCheckStatus === "DUPLICATE" && (
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                            Duplicate
+                          </span>
+                        )}
+                        {request.autoCheckStatus === "AI_REJECTED" && (
+                          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+                            Failed AI Review
+                          </span>
+                        )}
+                        {request.autoCheckStatus === "BUDGET_EXCEEDED" && (
+                          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+                            Budget Exceeded
+                          </span>
+                        )}
+                        {request.autoCheckStatus === "PENDING_CHECK" && (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-500 animate-pulse">
+                            Checking...
+                          </span>
+                        )}
                       </div>
+
+                      {request.autoCheckReason &&
+                      request.autoCheckStatus !== "PASSED" ? (
+                        <p className="mt-1 text-xs text-[#9b9b9b]">
+                          {request.autoCheckReason}
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#6b6b6b]">

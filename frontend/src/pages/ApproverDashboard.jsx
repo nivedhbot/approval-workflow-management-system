@@ -75,6 +75,7 @@ const ApproverDashboard = () => {
   const [priorityFilter, setPriorityFilter] = useState("ALL");
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [autoRejectedCount, setAutoRejectedCount] = useState(0);
 
   const links = [
     { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -112,6 +113,10 @@ const ApproverDashboard = () => {
   useEffect(() => {
     fetchPending();
     fetchReviewed();
+    requestAPI
+      .getAutoRejected()
+      .then((res) => setAutoRejectedCount(res.data.count || 0))
+      .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -238,7 +243,7 @@ const ApproverDashboard = () => {
             Prioritize urgent requests and keep your team moving.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             {
               label: "Total Pending",
@@ -254,6 +259,11 @@ const ApproverDashboard = () => {
               label: "High",
               value: stats.high,
               border: "border-l-4 border-l-orange-400",
+            },
+            {
+              label: "Auto-Rejected",
+              value: autoRejectedCount,
+              border: "border-l-4 border-l-slate-400",
             },
           ].map((card) => (
             <div
@@ -436,6 +446,11 @@ const ApproverDashboard = () => {
                             Due: {formatDate(request.deadline)}
                           </p>
                         ) : null}
+                        {request.requestedAmount > 0 && (
+                          <p className="mt-1 text-xs text-[#9b9b9b]">
+                            Requested: ₹{request.requestedAmount}
+                          </p>
+                        )}
                       </div>
                     </div>
 
