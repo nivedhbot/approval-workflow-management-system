@@ -55,7 +55,13 @@ const requestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["PENDING", "APPROVED", "REJECTED", "AUTO_REJECTED"],
+      enum: [
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+        "AUTO_REJECTED",
+        "REVISION_REQUIRED",
+      ],
       default: "PENDING",
     },
     approverId: {
@@ -71,6 +77,50 @@ const requestSchema = new mongoose.Schema(
     requestedAmount: {
       type: Number,
       default: 0,
+    },
+    allocatedAmount: {
+      type: Number,
+      default: 0,
+    },
+    budgetStatus: {
+      type: String,
+      enum: ["NOT_REQUESTED", "ALLOCATED", "DISBURSED", "VOID"],
+      default: "NOT_REQUESTED",
+    },
+    budgetTransactionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BudgetTransaction",
+      default: null,
+    },
+    budgetAllocatedAt: {
+      type: Date,
+      default: null,
+    },
+    budgetDisbursedAt: {
+      type: Date,
+      default: null,
+    },
+    revisionComment: {
+      type: String,
+      maxlength: [1000, "Revision comments cannot exceed 1000 characters"],
+      default: "",
+    },
+    revisionRequestedAt: {
+      type: Date,
+      default: null,
+    },
+    revisionRequestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    revisionCount: {
+      type: Number,
+      default: 0,
+    },
+    lastResubmittedAt: {
+      type: Date,
+      default: null,
     },
     autoCheckStatus: {
       type: String,
@@ -104,5 +154,7 @@ requestSchema.index({ createdAt: -1 });
 requestSchema.index({ teamId: 1, category: 1, status: 1 });
 requestSchema.index({ priority: 1, createdAt: -1 });
 requestSchema.index({ autoCheckStatus: 1, teamId: 1 });
+requestSchema.index({ budgetStatus: 1, teamId: 1 });
+requestSchema.index({ status: 1, revisionRequestedAt: -1 });
 
 module.exports = mongoose.model("Request", requestSchema);

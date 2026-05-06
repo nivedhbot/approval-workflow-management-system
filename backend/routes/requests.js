@@ -14,6 +14,11 @@ router.get(
   roleMiddleware(["CREATOR"]),
   requestController.getMyRequests,
 );
+router.put(
+  "/:id/resubmit",
+  roleMiddleware(["CREATOR"]),
+  requestController.resubmitRequest,
+);
 
 // APPROVER only routes
 router.get(
@@ -45,6 +50,16 @@ router.put(
   "/:id/reject",
   roleMiddleware(["APPROVER"]),
   requestController.rejectRequest,
+);
+router.put(
+  "/:id/request-changes",
+  roleMiddleware(["APPROVER"]),
+  requestController.requestChanges,
+);
+router.put(
+  "/:id/disburse",
+  roleMiddleware(["APPROVER"]),
+  requestController.disburseBudget,
 );
 
 module.exports = router;

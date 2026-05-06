@@ -2,6 +2,7 @@ const OpenAI = require("openai");
 const Request = require("../models/Request");
 const Team = require("../models/Team");
 const User = require("../models/User");
+const Requirement = require("../models/Requirement");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -27,19 +28,63 @@ exports.runAutoChecks = async (request, creatorUser) => {
     };
   }
 
+  if (!process.env.OPENAI_API_KEY) {
+    return {
+      passed: true,
+      status: "PASSED",
+      reason: "AI check skipped: OPENAI_API_KEY is not configured",
+    };
+  }
+
+  let requirementsContext = "No additional project requirements.";
+  try {
+    const teamId = request.teamId || "general";
+    const requirements = await Requirement.find({
+      status: "ACTIVE",
+      $and: [
+        { $or: [{ teamId }, { teamId: null }, { teamId: "" }] },
+        { $or: [{ category: request.category }, { category: "ALL" }] },
+      ],
+    })
+      .sort({ enforcement: -1, updatedAt: -1 })
+      .limit(25)
+      .lean();
+
+    if (requirements.length > 0) {
+      requirementsContext = requirements
+        .map((req, index) => {
+          const tags = req.tags?.length ? ` Tags: ${req.tags.join(", ")}.` : "";
+          const examples = req.examples?.length
+            ? ` Examples: ${req.examples.join(" | ")}.`
+            : "";
+          return `${index + 1}. [${req.enforcement}] ${req.title} - ${req.rule}.${tags}${examples}`;
+        })
+        .join("\n");
+    }
+  } catch (error) {
+    console.error("Failed to load requirements:", error.message || error);
+  }
+
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 150,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            'You are a request validation assistant. Evaluate if the request is clear, specific, and actionable. Reply ONLY with valid JSON: {"verdict":"PASS" or "REJECT","reason":"one sentence"}',
+            'You are a request validation assistant. Evaluate if the request is clear, specific, and actionable. Apply the project requirements. If any BLOCKING requirement is violated, respond with REJECT. Reply ONLY with valid JSON: {"verdict":"PASS" or "REJECT","reason":"one sentence"}',
         },
         {
           role: "user",
-          content: `Title: ${request.title}\nDescription: ${request.description}\nCategory: ${request.category}\nRequested Amount: ${request.requestedAmount}`,
+          content:
+            `Project requirements:\n${requirementsContext}\n\n` +
+            `Title: ${request.title}\n` +
+            `Description: ${request.description}\n` +
+            `Category: ${request.category}\n` +
+            `Deadline: ${request.deadline ? request.deadline.toISOString() : "not provided"}\n` +
+            `Requested Amount: ${request.requestedAmount || 0}`,
         },
       ],
     });
@@ -55,11 +100,11 @@ exports.runAutoChecks = async (request, creatorUser) => {
       };
     }
   } catch (error) {
-    console.error(error);
+    console.error("OpenAI auto-check failed:", error.message || error);
     return {
       passed: true,
       status: "PASSED",
-      reason: "AI check skipped",
+      reason: "AI check skipped: OpenAI request failed",
     };
   }
 

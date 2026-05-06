@@ -33,8 +33,13 @@ const authRateLimiter = rateLimit({
 });
 
 // Routes
-app.use("/api/auth", authRateLimiter, require("./routes/auth"));
+const authRoutes = require("./routes/auth");
+app.use(
+  "/api/auth",
+  process.env.NODE_ENV === "test" ? authRoutes : [authRateLimiter, authRoutes],
+);
 app.use("/api/requests", require("./routes/requests"));
+app.use("/api/requirements", require("./routes/requirements"));
 
 // Health check
 app.get("/", (req, res) => {

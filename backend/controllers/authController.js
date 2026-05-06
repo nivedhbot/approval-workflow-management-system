@@ -86,6 +86,7 @@ exports.register = async (req, res) => {
         email: user.email,
         role: user.role,
         teamId: user.teamId,
+        budgetLimit: user.budgetLimit || 0,
       },
     });
   } catch (error) {
@@ -158,6 +159,7 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         teamId: user.teamId || "general",
+        budgetLimit: user.budgetLimit || 0,
       },
     });
   } catch (error) {
@@ -187,6 +189,7 @@ exports.getMe = async (req, res) => {
         email: user.email,
         role: user.role,
         teamId: user.teamId || "general",
+        budgetLimit: user.budgetLimit || 0,
       },
     });
   } catch (error) {

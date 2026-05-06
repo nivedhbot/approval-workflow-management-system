@@ -3,6 +3,8 @@ const request = require("supertest");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 const User = require("../models/User");
 const Request = require("../models/Request");
+const BudgetTransaction = require("../models/BudgetTransaction");
+const Requirement = require("../models/Requirement");
 
 let app;
 let mongoServer;
@@ -43,6 +45,8 @@ afterAll(async () => {
 beforeEach(async () => {
   await User.deleteMany({});
   await Request.deleteMany({});
+  await BudgetTransaction.deleteMany({});
+  await Requirement.deleteMany({});
 });
 
 describe("Approval workflow access control", () => {
@@ -202,6 +206,94 @@ jest.mock("openai", () => {
 });
 
 describe("Auto-check validation", () => {
+  test.each([
+    "BUG_REPORT",
+    "SERVER_ISSUE",
+    "DEADLINE_EXTENSION",
+    "FEATURE_REQUEST",
+    "HR_REQUEST",
+    "OTHER",
+  ])("Allows valid category %s", async (category) => {
+    const creator = await registerUser({
+      username: `creator-category-${category.toLowerCase()}`,
+      email: `${category.toLowerCase()}@example.com`,
+      password: "Password1!",
+      role: "CREATOR",
+      teamId: "delta",
+    });
+
+    const res = await createRequestAs(creator.body.token, {
+      title: `Request for ${category}`,
+      description: "Valid request for category coverage.",
+      category,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.request.category).toBe(category);
+  });
+
+  test.each(["LOW", "MEDIUM", "HIGH", "CRITICAL"])(
+    "Preserves priority %s",
+    async (priority) => {
+      const creator = await registerUser({
+        username: `creator-priority-${priority.toLowerCase()}`,
+        email: `${priority.toLowerCase()}@example.com`,
+        password: "Password1!",
+        role: "CREATOR",
+        teamId: "epsilon",
+      });
+
+      const res = await createRequestAs(creator.body.token, {
+        title: `Priority ${priority} request`,
+        description: "Valid request for priority coverage.",
+        category: "FEATURE_REQUEST",
+        priority,
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.request.priority).toBe(priority);
+    },
+  );
+
+  test("Pending requests are ordered by priority before age", async () => {
+    const creator = await registerUser({
+      username: "creator-order",
+      email: "creator-order@example.com",
+      password: "Password1!",
+      role: "CREATOR",
+      teamId: "zeta",
+    });
+
+    await createRequestAs(creator.body.token, {
+      title: "Low priority request",
+      description: "Should appear after higher priorities.",
+      category: "OTHER",
+      priority: "LOW",
+    });
+
+    await createRequestAs(creator.body.token, {
+      title: "Critical priority request",
+      description: "Should be listed first.",
+      category: "FEATURE_REQUEST",
+      priority: "CRITICAL",
+    });
+
+    const approver = await registerUser({
+      username: "approver-order",
+      email: "approver-order@example.com",
+      password: "Password1!",
+      role: "APPROVER",
+      teamId: "zeta",
+    });
+
+    const pending = await request(app)
+      .get("/api/requests/pending")
+      .set("Authorization", `Bearer ${approver.body.token}`);
+
+    expect(pending.status).toBe(200);
+    expect(pending.body.requests[0].priority).toBe("CRITICAL");
+  });
+
   test("Duplicate request is auto-rejected", async () => {
     const creator = await registerUser({
       username: "creator-auto-1",
@@ -272,5 +364,153 @@ describe("Auto-check validation", () => {
     expect(res.status).toBe(201);
     expect(res.body.request.autoCheckStatus).toBe("PASSED");
     expect(res.body.request.status).toBe("PENDING");
+  });
+});
+
+describe("Revision workflow", () => {
+  test("Approver can request changes and creator can resubmit", async () => {
+    const creator = await registerUser({
+      username: "creator-revise",
+      email: "creator-revise@example.com",
+      password: "Password1!",
+      role: "CREATOR",
+      teamId: "omega",
+    });
+
+    const approver = await registerUser({
+      username: "approver-revise",
+      email: "approver-revise@example.com",
+      password: "Password1!",
+      role: "APPROVER",
+      teamId: "omega",
+    });
+
+    const createRes = await createRequestAs(creator.body.token, {
+      title: "Initial request",
+      description: "Needs more detail.",
+      category: "FEATURE_REQUEST",
+    });
+
+    const requestId = createRes.body.request.id;
+
+    const revisionRes = await request(app)
+      .put(`/api/requests/${requestId}/request-changes`)
+      .set("Authorization", `Bearer ${approver.body.token}`)
+      .send({ comments: "Please add a rollout plan." });
+
+    expect(revisionRes.status).toBe(200);
+
+    const resubmitRes = await request(app)
+      .put(`/api/requests/${requestId}/resubmit`)
+      .set("Authorization", `Bearer ${creator.body.token}`)
+      .send({
+        title: "Updated request",
+        description: "Now includes rollout plan and impact.",
+        category: "FEATURE_REQUEST",
+        priority: "HIGH",
+      });
+
+    expect(resubmitRes.status).toBe(200);
+    expect(resubmitRes.body.request.status).toBe("PENDING");
+    expect(resubmitRes.body.request.revisionCount).toBe(1);
+  });
+});
+
+describe("Budget allocation and disbursement", () => {
+  test("Approval allocates budget and disbursement updates status", async () => {
+    const creator = await registerUser({
+      username: "creator-budget",
+      email: "creator-budget@example.com",
+      password: "Password1!",
+      role: "CREATOR",
+      teamId: "sigma",
+    });
+
+    const approver = await registerUser({
+      username: "approver-budget",
+      email: "approver-budget@example.com",
+      password: "Password1!",
+      role: "APPROVER",
+      teamId: "sigma",
+    });
+
+    const createRes = await createRequestAs(creator.body.token, {
+      title: "Budgeted request",
+      description: "Requires funding.",
+      category: "FEATURE_REQUEST",
+      requestedAmount: 250,
+    });
+
+    const approveRes = await request(app)
+      .put(`/api/requests/${createRes.body.request.id}/approve`)
+      .set("Authorization", `Bearer ${approver.body.token}`)
+      .send({ comments: "Approved with budget" });
+
+    expect(approveRes.status).toBe(200);
+
+    const approvedRequest = await Request.findById(createRes.body.request.id);
+    expect(approvedRequest.budgetStatus).toBe("ALLOCATED");
+
+    const transaction = await BudgetTransaction.findOne({
+      requestId: approvedRequest._id,
+    });
+    expect(transaction).toBeTruthy();
+    expect(transaction.status).toBe("ALLOCATED");
+
+    const disburseRes = await request(app)
+      .put(`/api/requests/${approvedRequest._id}/disburse`)
+      .set("Authorization", `Bearer ${approver.body.token}`)
+      .send({ notes: "Funds released" });
+
+    expect(disburseRes.status).toBe(200);
+
+    const updatedRequest = await Request.findById(approvedRequest._id);
+    expect(updatedRequest.budgetStatus).toBe("DISBURSED");
+
+    const updatedTransaction = await BudgetTransaction.findOne({
+      requestId: approvedRequest._id,
+    });
+    expect(updatedTransaction.status).toBe("DISBURSED");
+  });
+});
+
+describe("Requirements knowledge base", () => {
+  test("Approver can create requirements and creators can read them", async () => {
+    const approver = await registerUser({
+      username: "approver-req",
+      email: "approver-req@example.com",
+      password: "Password1!",
+      role: "APPROVER",
+      teamId: "lambda",
+    });
+
+    const creator = await registerUser({
+      username: "creator-req",
+      email: "creator-req@example.com",
+      password: "Password1!",
+      role: "CREATOR",
+      teamId: "lambda",
+    });
+
+    const createRequirement = await request(app)
+      .post("/api/requirements")
+      .set("Authorization", `Bearer ${approver.body.token}`)
+      .send({
+        title: "Security check",
+        rule: "Requests must include a mitigation plan for risks.",
+        category: "FEATURE_REQUEST",
+        enforcement: "BLOCKING",
+        tags: ["security", "risk"],
+      });
+
+    expect(createRequirement.status).toBe(201);
+
+    const listRes = await request(app)
+      .get("/api/requirements")
+      .set("Authorization", `Bearer ${creator.body.token}`);
+
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.requirements.length).toBe(1);
+    expect(listRes.body.requirements[0].title).toBe("Security check");
   });
 });
