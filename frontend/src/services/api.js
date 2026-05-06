@@ -50,9 +50,20 @@ export const requestAPI = {
   getReviewed: () => api.get("/requests/reviewed"),
   approve: (id, comments) => api.put(`/requests/${id}/approve`, { comments }),
   reject: (id, comments) => api.put(`/requests/${id}/reject`, { comments }),
+  requestChanges: (id, comments) =>
+    api.put(`/requests/${id}/request-changes`, { comments }),
+  resubmit: (id, data) => api.put(`/requests/${id}/resubmit`, data),
+  disburse: (id, notes) => api.put(`/requests/${id}/disburse`, { notes }),
   bulkApprove: (requestIds, comments) =>
     api.put("/requests/bulk-approve", { requestIds, comments }),
   getAutoRejected: () => api.get("/requests/auto-rejected"),
+};
+
+export const requirementsAPI = {
+  list: (params) => api.get("/requirements", { params }),
+  create: (data) => api.post("/requirements", data),
+  update: (id, data) => api.put(`/requirements/${id}`, data),
+  remove: (id) => api.delete(`/requirements/${id}`),
 };
 
 export default api;

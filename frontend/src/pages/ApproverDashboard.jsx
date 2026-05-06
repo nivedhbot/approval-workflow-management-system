@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { requestAPI } from "../services/api";
+import { requestAPI, requirementsAPI } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../components/Toast";
 import LoadingSkeleton from "../components/LoadingSkeleton";
@@ -32,6 +32,8 @@ const statusBadge = {
     "rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700",
   REJECTED:
     "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
+  REVISION_REQUIRED:
+    "rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700",
 };
 
 const priorityBadge = {
@@ -76,11 +78,27 @@ const ApproverDashboard = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [autoRejectedCount, setAutoRejectedCount] = useState(0);
+  const [requirements, setRequirements] = useState([]);
+  const [requirementsLoading, setRequirementsLoading] = useState(true);
+  const [requirementsSaving, setRequirementsSaving] = useState(false);
+  const [requirementsActionId, setRequirementsActionId] = useState(null);
+  const [requirementsForm, setRequirementsForm] = useState({
+    title: "",
+    rule: "",
+    category: "ALL",
+    enforcement: "GUIDANCE",
+    tags: "",
+    examples: "",
+    status: "ACTIVE",
+    scope: "TEAM",
+  });
+  const [requirementsFilter, setRequirementsFilter] = useState("ALL");
 
   const links = [
     { key: "overview", label: "Overview", icon: LayoutDashboard },
     { key: "pending", label: "Pending", icon: Clock },
     { key: "reviewed", label: "Reviewed", icon: CheckCircle },
+    { key: "requirements", label: "Requirements", icon: Inbox },
   ];
 
   const fetchPending = async () => {
@@ -110,9 +128,25 @@ const ApproverDashboard = () => {
     }
   };
 
+  const fetchRequirements = async () => {
+    try {
+      setRequirementsLoading(true);
+      const res = await requirementsAPI.list({ includeInactive: true });
+      setRequirements(res.data.requirements || []);
+    } catch (err) {
+      showToast(
+        err.response?.data?.error || "Failed to load requirements",
+        "error",
+      );
+    } finally {
+      setRequirementsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchPending();
     fetchReviewed();
+    fetchRequirements();
     requestAPI
       .getAutoRejected()
       .then((res) => setAutoRejectedCount(res.data.count || 0))
@@ -137,6 +171,9 @@ const ApproverDashboard = () => {
       if (action === "approve") {
         await requestAPI.approve(request.id, comment);
         showToast("Request approved", "success");
+      } else if (action === "request_changes") {
+        await requestAPI.requestChanges(request.id, comment);
+        showToast("Changes requested", "info");
       } else {
         await requestAPI.reject(request.id, comment);
         showToast("Request rejected", "info");
@@ -203,6 +240,82 @@ const ApproverDashboard = () => {
     }
   };
 
+  const handleDisburse = async (request) => {
+    const key = `${request.id}-disburse`;
+    setActionLoading(key);
+    try {
+      await requestAPI.disburse(request.id, "");
+      showToast("Budget disbursed", "success");
+      await fetchReviewed();
+    } catch (err) {
+      showToast(
+        err.response?.data?.error || "Failed to disburse budget",
+        "error",
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRequirementSubmit = async () => {
+    if (!requirementsForm.title.trim() || !requirementsForm.rule.trim()) {
+      showToast("Title and rule are required", "error");
+      return;
+    }
+
+    setRequirementsSaving(true);
+    try {
+      const payload = {
+        title: requirementsForm.title.trim(),
+        rule: requirementsForm.rule.trim(),
+        category: requirementsForm.category,
+        enforcement: requirementsForm.enforcement,
+        tags: requirementsForm.tags,
+        examples: requirementsForm.examples,
+        status: requirementsForm.status,
+        teamId: requirementsForm.scope === "GLOBAL" ? "global" : user?.teamId,
+      };
+
+      await requirementsAPI.create(payload);
+      showToast("Requirement added", "success");
+      setRequirementsForm({
+        title: "",
+        rule: "",
+        category: "ALL",
+        enforcement: "GUIDANCE",
+        tags: "",
+        examples: "",
+        status: "ACTIVE",
+        scope: "TEAM",
+      });
+      await fetchRequirements();
+    } catch (err) {
+      showToast(
+        err.response?.data?.error || "Failed to add requirement",
+        "error",
+      );
+    } finally {
+      setRequirementsSaving(false);
+    }
+  };
+
+  const handleRequirementToggle = async (requirement) => {
+    const nextStatus = requirement.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    setRequirementsActionId(requirement.id);
+    try {
+      await requirementsAPI.update(requirement.id, { status: nextStatus });
+      showToast("Requirement updated", "success");
+      await fetchRequirements();
+    } catch (err) {
+      showToast(
+        err.response?.data?.error || "Failed to update requirement",
+        "error",
+      );
+    } finally {
+      setRequirementsActionId(null);
+    }
+  };
+
   const reviewedByMe = useMemo(
     () =>
       reviewed
@@ -210,6 +323,16 @@ const ApproverDashboard = () => {
         .filter((req) => req.status === reviewFilter),
     [reviewFilter, reviewed, user?.id],
   );
+
+  const activeRequirementCount = useMemo(
+    () => requirements.filter((req) => req.status === "ACTIVE").length,
+    [requirements],
+  );
+
+  const filteredRequirements = useMemo(() => {
+    if (requirementsFilter === "ALL") return requirements;
+    return requirements.filter((req) => req.category === requirementsFilter);
+  }, [requirements, requirementsFilter]);
 
   const handleSelectSection = (key) => {
     setActiveSection(key);
@@ -397,6 +520,8 @@ const ApproverDashboard = () => {
                 const loadingApprove =
                   actionLoading === `${request.id}-approve`;
                 const loadingReject = actionLoading === `${request.id}-reject`;
+                const loadingRevision =
+                  actionLoading === `${request.id}-request_changes`;
                 const isExpanded = expanded[request.id];
                 const isCritical = request.priority === "CRITICAL";
                 const isSelected = selectedIds.includes(request.id);
@@ -492,11 +617,15 @@ const ApproverDashboard = () => {
                             placeholder="Add a comment (optional)..."
                             className="w-full rounded-xl bg-white border border-[#e8e6e3] text-[#1a1a1a] placeholder:text-[#9b9b9b] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
                           />
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                             <button
                               type="button"
                               onClick={() => handleAction(request, "approve")}
-                              disabled={loadingApprove || loadingReject}
+                              disabled={
+                                loadingApprove ||
+                                loadingReject ||
+                                loadingRevision
+                              }
                               className="flex items-center justify-center gap-2 rounded-xl bg-[#2d6a4f] text-white hover:bg-[#40916c] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {loadingApprove ? (
@@ -508,8 +637,31 @@ const ApproverDashboard = () => {
                             </button>
                             <button
                               type="button"
+                              onClick={() =>
+                                handleAction(request, "request_changes")
+                              }
+                              disabled={
+                                loadingApprove ||
+                                loadingReject ||
+                                loadingRevision
+                              }
+                              className="flex items-center justify-center gap-2 rounded-xl bg-blue-500 text-white hover:bg-blue-600 px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {loadingRevision ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <AlertTriangle className="h-4 w-4" />
+                              )}
+                              Request Changes
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleAction(request, "reject")}
-                              disabled={loadingApprove || loadingReject}
+                              disabled={
+                                loadingApprove ||
+                                loadingReject ||
+                                loadingRevision
+                              }
                               className="flex items-center justify-center gap-2 rounded-xl bg-red-500 text-white hover:bg-red-600 px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {loadingReject ? (
@@ -609,14 +761,350 @@ const ApproverDashboard = () => {
                 <p className="mt-2 text-xs text-[#9b9b9b]">
                   Team: {request.teamId || "general"}
                 </p>
+                {request.requestedAmount > 0 ? (
+                  <div className="mt-2 text-xs text-[#9b9b9b]">
+                    Requested: ₹{request.requestedAmount} · Budget status:{" "}
+                    <span className="font-semibold">
+                      {request.budgetStatus || "NOT_REQUESTED"}
+                    </span>
+                  </div>
+                ) : null}
                 {request.approvalComments ? (
                   <div className="mt-3 p-3 rounded-lg bg-white border-l-4 border-[#2d6a4f] text-sm text-[#4a4a4a]">
                     {request.approvalComments}
                   </div>
                 ) : null}
+                {request.status === "APPROVED" &&
+                request.budgetStatus === "ALLOCATED" ? (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDisburse(request)}
+                      disabled={actionLoading === `${request.id}-disburse`}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#2d6a4f] px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-[#40916c] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {actionLoading === `${request.id}-disburse` ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                      Mark Disbursed
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))
           )}
+        </div>
+      </section>
+
+      <section
+        id="requirements"
+        className="mt-8 rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
+              Project Requirements
+            </h2>
+            <p className="mt-1 text-xs text-[#9b9b9b]">
+              Active rules: {activeRequirementCount}
+            </p>
+          </div>
+          <div className="inline-flex rounded-xl border border-[#e8e6e3] bg-white p-1">
+            {[
+              { label: "All", value: "ALL" },
+              { label: "Bug Report", value: "BUG_REPORT" },
+              { label: "Server Issue", value: "SERVER_ISSUE" },
+              { label: "Deadline", value: "DEADLINE_EXTENSION" },
+              { label: "Feature", value: "FEATURE_REQUEST" },
+              { label: "HR", value: "HR_REQUEST" },
+              { label: "Other", value: "OTHER" },
+            ].map((option) => {
+              const active = requirementsFilter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setRequirementsFilter(option.value)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                    active
+                      ? "bg-[#2d6a4f]/10 text-[#2d6a4f]"
+                      : "text-[#6b6b6b] hover:bg-[#f0efed]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <div>
+            {requirementsLoading ? (
+              <LoadingSkeleton />
+            ) : filteredRequirements.length === 0 ? (
+              <div className="rounded-xl border border-[#e8e6e3] bg-[#fafafa] p-6 text-sm text-[#6b6b6b]">
+                No requirements yet. Add your first rule to guide AI reviews.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredRequirements.map((req) => (
+                  <div
+                    key={req.id}
+                    className="rounded-2xl border border-[#e8e6e3] bg-white p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[#1a1a1a]">
+                          {req.title}
+                        </p>
+                        <p className="mt-1 text-xs text-[#9b9b9b]">
+                          Scope: {req.teamId ? req.teamId : "global"} ·
+                          Category: {req.category}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                            req.enforcement === "BLOCKING"
+                              ? "border-red-200 bg-red-50 text-red-700"
+                              : "border-blue-200 bg-blue-50 text-blue-700"
+                          }`}
+                        >
+                          {req.enforcement}
+                        </span>
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                            req.status === "ACTIVE"
+                              ? "border-green-200 bg-green-50 text-green-700"
+                              : "border-slate-200 bg-slate-50 text-slate-600"
+                          }`}
+                        >
+                          {req.status}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm text-[#6b6b6b]">{req.rule}</p>
+                    {req.tags?.length ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {req.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border border-[#e8e6e3] bg-white px-2 py-0.5 text-xs text-[#6b6b6b]"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {req.examples?.length ? (
+                      <div className="mt-3 text-xs text-[#9b9b9b]">
+                        Examples: {req.examples.join(" · ")}
+                      </div>
+                    ) : null}
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => handleRequirementToggle(req)}
+                        disabled={requirementsActionId === req.id}
+                        className="inline-flex items-center gap-2 rounded-xl border border-[#e8e6e3] px-3 py-2 text-xs font-semibold text-[#6b6b6b] transition-all duration-200 hover:bg-[#f0efed] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {requirementsActionId === req.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : null}
+                        {req.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-[#e8e6e3] bg-[#fcfcfc] p-4">
+            <h3 className="font-['Sora'] text-lg font-semibold text-[#1a1a1a]">
+              Add Requirement
+            </h3>
+            <p className="mt-1 text-xs text-[#9b9b9b]">
+              Define rules to align AI reviews with your real project needs.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={requirementsForm.title}
+                  onChange={(e) =>
+                    setRequirementsForm((prev) => ({
+                      ...prev,
+                      title: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-[#e8e6e3] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                  placeholder="Security acceptance criteria"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                    Category
+                  </label>
+                  <select
+                    value={requirementsForm.category}
+                    onChange={(e) =>
+                      setRequirementsForm((prev) => ({
+                        ...prev,
+                        category: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-[#e8e6e3] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                  >
+                    <option value="ALL">All</option>
+                    <option value="BUG_REPORT">Bug Report</option>
+                    <option value="SERVER_ISSUE">Server Issue</option>
+                    <option value="DEADLINE_EXTENSION">
+                      Deadline Extension
+                    </option>
+                    <option value="FEATURE_REQUEST">Feature Request</option>
+                    <option value="HR_REQUEST">HR Request</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                    Enforcement
+                  </label>
+                  <select
+                    value={requirementsForm.enforcement}
+                    onChange={(e) =>
+                      setRequirementsForm((prev) => ({
+                        ...prev,
+                        enforcement: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-[#e8e6e3] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                  >
+                    <option value="GUIDANCE">Guidance</option>
+                    <option value="BLOCKING">Blocking</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                  Rule
+                </label>
+                <textarea
+                  rows={3}
+                  value={requirementsForm.rule}
+                  onChange={(e) =>
+                    setRequirementsForm((prev) => ({
+                      ...prev,
+                      rule: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-[#e8e6e3] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                  placeholder="Describe what must be included for approval."
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                    Tags (comma separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={requirementsForm.tags}
+                    onChange={(e) =>
+                      setRequirementsForm((prev) => ({
+                        ...prev,
+                        tags: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-[#e8e6e3] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                    placeholder="security, compliance"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                    Examples (comma separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={requirementsForm.examples}
+                    onChange={(e) =>
+                      setRequirementsForm((prev) => ({
+                        ...prev,
+                        examples: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-[#e8e6e3] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                    placeholder="e.g. threat model, rollback plan"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                    Scope
+                  </label>
+                  <select
+                    value={requirementsForm.scope}
+                    onChange={(e) =>
+                      setRequirementsForm((prev) => ({
+                        ...prev,
+                        scope: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-[#e8e6e3] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                  >
+                    <option value="TEAM">
+                      Team ({user?.teamId || "general"})
+                    </option>
+                    <option value="GLOBAL">Global</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#6b6b6b]">
+                    Status
+                  </label>
+                  <select
+                    value={requirementsForm.status}
+                    onChange={(e) =>
+                      setRequirementsForm((prev) => ({
+                        ...prev,
+                        status: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-[#e8e6e3] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#2d6a4f] focus:border-[#2d6a4f]"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRequirementSubmit}
+                disabled={requirementsSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2d6a4f] px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-[#40916c] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {requirementsSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
+                Add Requirement
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </DashboardLayout>

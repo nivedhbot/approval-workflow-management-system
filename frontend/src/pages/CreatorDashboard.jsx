@@ -7,7 +7,7 @@ import {
   PlusCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { requestAPI } from "../services/api";
+import { requestAPI, requirementsAPI } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../components/Toast";
 import LoadingSkeleton from "../components/LoadingSkeleton";
@@ -19,6 +19,10 @@ const statusBadge = {
   APPROVED:
     "rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700",
   REJECTED:
+    "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
+  REVISION_REQUIRED:
+    "rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700",
+  AUTO_REJECTED:
     "rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700",
 };
 
@@ -47,6 +51,16 @@ const formatDate = (value) => {
   return date.toLocaleDateString();
 };
 
+const formatCurrency = (value) => {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "0";
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
 const timeAgo = (date) => {
   const diff = Date.now() - new Date(date);
   const mins = Math.floor(diff / 60000);
@@ -66,6 +80,10 @@ const CreatorDashboard = () => {
   const [activeSection, setActiveSection] = useState("overview");
   const [filter, setFilter] = useState("ALL");
   const [expanded, setExpanded] = useState({});
+  const [editingRequestId, setEditingRequestId] = useState(null);
+  const [requirements, setRequirements] = useState([]);
+  const [requirementsLoading, setRequirementsLoading] = useState(true);
+  const [requirementsFilter, setRequirementsFilter] = useState("ALL");
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -79,6 +97,7 @@ const CreatorDashboard = () => {
     { key: "overview", label: "Overview", icon: LayoutDashboard },
     { key: "new-request", label: "New Request", icon: PlusCircle },
     { key: "my-requests", label: "My Requests", icon: ClipboardList },
+    { key: "requirements", label: "Guidelines", icon: Inbox },
   ];
 
   const fetchRequests = async () => {
@@ -100,9 +119,28 @@ const CreatorDashboard = () => {
     fetchRequests();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const fetchRequirements = async () => {
+    try {
+      setRequirementsLoading(true);
+      const res = await requirementsAPI.list();
+      setRequirements(res.data.requirements || []);
+    } catch (err) {
+      showToast(
+        err.response?.data?.error || "Failed to load requirements",
+        "error",
+      );
+    } finally {
+      setRequirementsLoading(false);
+    }
+  };
+
   useEffect(() => {
     document.title = "Creator Dashboard | FlowApprove";
   }, []);
+
+  useEffect(() => {
+    fetchRequirements();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stats = useMemo(
     () => ({
@@ -134,6 +172,16 @@ const CreatorDashboard = () => {
     });
   }, [filteredRequests]);
 
+  const activeRequirementCount = useMemo(
+    () => requirements.filter((req) => req.status === "ACTIVE").length,
+    [requirements],
+  );
+
+  const filteredRequirements = useMemo(() => {
+    if (requirementsFilter === "ALL") return requirements;
+    return requirements.filter((req) => req.category === requirementsFilter);
+  }, [requirements, requirementsFilter]);
+
   const submitRequest = async () => {
     if (!form.title || !form.description) {
       showToast("Title and description are required", "error");
@@ -142,7 +190,7 @@ const CreatorDashboard = () => {
 
     setSubmitting(true);
     try {
-      await requestAPI.create({
+      const payload = {
         title: form.title,
         description: form.description,
         category: form.category,
@@ -151,8 +199,16 @@ const CreatorDashboard = () => {
         requestedAmount: form.requestedAmount
           ? Number(form.requestedAmount)
           : 0,
-      });
-      showToast("Request created successfully", "success");
+      };
+
+      if (editingRequestId) {
+        await requestAPI.resubmit(editingRequestId, payload);
+        showToast("Request resubmitted", "success");
+        setEditingRequestId(null);
+      } else {
+        await requestAPI.create(payload);
+        showToast("Request created successfully", "success");
+      }
       setForm({
         title: "",
         description: "",
@@ -170,6 +226,36 @@ const CreatorDashboard = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const beginResubmit = (request) => {
+    setEditingRequestId(request.id);
+    setForm({
+      title: request.title || "",
+      description: request.description || "",
+      category: request.category || "OTHER",
+      priority: request.priority || "MEDIUM",
+      deadline: request.deadline
+        ? new Date(request.deadline).toISOString().slice(0, 10)
+        : null,
+      requestedAmount:
+        request.requestedAmount && request.requestedAmount > 0
+          ? String(request.requestedAmount)
+          : "",
+    });
+    handleSelectSection("new-request");
+  };
+
+  const cancelResubmit = () => {
+    setEditingRequestId(null);
+    setForm({
+      title: "",
+      description: "",
+      category: "OTHER",
+      priority: "MEDIUM",
+      deadline: null,
+      requestedAmount: "",
+    });
   };
 
   const handleSelectSection = (key) => {
@@ -201,6 +287,27 @@ const CreatorDashboard = () => {
           <p className="mt-1 text-sm text-[#6b6b6b]">
             Submit requests for your team approver to review.
           </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-[#eee7d8] bg-[#fcfaf5] p-4">
+              <p className="text-xs uppercase tracking-[0.24em] text-[#8f7a4f]">
+                Team budget limit
+              </p>
+              <p className="mt-2 font-['Sora'] text-lg font-semibold text-[#1a1a1a]">
+                {user?.budgetLimit > 0
+                  ? formatCurrency(user.budgetLimit)
+                  : "Not set yet"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#e8e6e3] bg-[#fafafa] p-4">
+              <p className="text-xs uppercase tracking-[0.24em] text-[#6b6b6b]">
+                How to request funds
+              </p>
+              <p className="mt-2 text-sm text-[#6b6b6b]">
+                Add an optional requested amount only if the request needs a
+                budget estimate. Leave it blank when no money is involved.
+              </p>
+            </div>
+          </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
@@ -248,7 +355,7 @@ const CreatorDashboard = () => {
         className="mt-8 rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6"
       >
         <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
-          New Request
+          {editingRequestId ? "Revise Request" : "New Request"}
         </h2>
         <p className="mt-1 text-sm text-[#6b6b6b]">
           Submit approval requests with clear context.
@@ -256,6 +363,22 @@ const CreatorDashboard = () => {
         <p className="mt-1 text-xs text-[#9b9b9b]">
           This request is routed to team: {user?.teamId || "general"}
         </p>
+        <p className="mt-1 text-xs text-[#9b9b9b]">
+          If your request has cost, enter the estimated amount. The approver
+          will review it against your team budget and the request details.
+        </p>
+        {editingRequestId ? (
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-700">
+            <span>Editing a revision-required request.</span>
+            <button
+              type="button"
+              onClick={cancelResubmit}
+              className="rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700 transition-all hover:bg-blue-100"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
 
         <div className="mt-6 space-y-4">
           <div>
@@ -420,7 +543,11 @@ const CreatorDashboard = () => {
             ) : (
               <PlusCircle className="h-4 w-4" />
             )}
-            {submitting ? "Submitting..." : "Submit Request"}
+            {submitting
+              ? "Submitting..."
+              : editingRequestId
+                ? "Resubmit Request"
+                : "Submit Request"}
           </button>
         </div>
       </section>
@@ -434,7 +561,14 @@ const CreatorDashboard = () => {
             My Requests
           </h2>
           <div className="inline-flex rounded-xl border border-[#e8e6e3] bg-white p-1">
-            {["ALL", "PENDING", "APPROVED", "REJECTED"].map((tab) => (
+            {[
+              "ALL",
+              "PENDING",
+              "REVISION_REQUIRED",
+              "APPROVED",
+              "REJECTED",
+              "AUTO_REJECTED",
+            ].map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -445,7 +579,12 @@ const CreatorDashboard = () => {
                     : "text-[#6b6b6b] hover:bg-[#f0efed]"
                 }`}
               >
-                {tab === "ALL" ? "All" : tab[0] + tab.slice(1).toLowerCase()}
+                {tab === "ALL"
+                  ? "All"
+                  : tab
+                      .split("_")
+                      .map((word) => word[0] + word.slice(1).toLowerCase())
+                      .join(" ")}
               </button>
             ))}
           </div>
@@ -533,6 +672,11 @@ const CreatorDashboard = () => {
                           Due: {formatDate(request.deadline)}
                         </span>
                       ) : null}
+                      {request.requestedAmount > 0 ? (
+                        <span className="rounded-full border border-[#e8e6e3] bg-white px-2.5 py-1">
+                          Budget: {request.budgetStatus || "NOT_REQUESTED"}
+                        </span>
+                      ) : null}
                     </div>
 
                     <button
@@ -549,6 +693,16 @@ const CreatorDashboard = () => {
                     >
                       {request.description}
                     </button>
+
+                    {request.status === "REVISION_REQUIRED" &&
+                    request.revisionComment ? (
+                      <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+                        <p className="text-xs uppercase tracking-wide text-blue-500">
+                          Changes requested
+                        </p>
+                        <p className="mt-1">{request.revisionComment}</p>
+                      </div>
+                    ) : null}
 
                     <div className="mt-3 text-xs text-[#9b9b9b]">
                       Team: {request.teamId || user?.teamId || "general"}
@@ -578,9 +732,121 @@ const CreatorDashboard = () => {
                         <p>{request.approvalComments}</p>
                       </div>
                     ) : null}
+
+                    {request.status === "REVISION_REQUIRED" ? (
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          onClick={() => beginResubmit(request)}
+                          className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 transition-all duration-200 hover:bg-blue-100"
+                        >
+                          Edit & Resubmit
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section
+        id="requirements"
+        className="mt-8 rounded-2xl bg-white border border-[#e8e6e3] shadow-sm p-6"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-['Sora'] text-xl font-semibold text-[#1a1a1a]">
+              Project Guidelines
+            </h2>
+            <p className="mt-1 text-xs text-[#9b9b9b]">
+              Active rules: {activeRequirementCount}
+            </p>
+          </div>
+          <div className="inline-flex rounded-xl border border-[#e8e6e3] bg-white p-1">
+            {[
+              { label: "All", value: "ALL" },
+              { label: "Bug Report", value: "BUG_REPORT" },
+              { label: "Server Issue", value: "SERVER_ISSUE" },
+              { label: "Deadline", value: "DEADLINE_EXTENSION" },
+              { label: "Feature", value: "FEATURE_REQUEST" },
+              { label: "HR", value: "HR_REQUEST" },
+              { label: "Other", value: "OTHER" },
+            ].map((option) => {
+              const active = requirementsFilter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setRequirementsFilter(option.value)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                    active
+                      ? "bg-[#2d6a4f]/10 text-[#2d6a4f]"
+                      : "text-[#6b6b6b] hover:bg-[#f0efed]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          {requirementsLoading ? (
+            <LoadingSkeleton />
+          ) : filteredRequirements.length === 0 ? (
+            <div className="rounded-xl border border-[#e8e6e3] bg-[#fafafa] p-6 text-sm text-[#6b6b6b]">
+              No guidelines have been published yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredRequirements.map((req) => (
+                <div
+                  key={req.id}
+                  className="rounded-2xl border border-[#e8e6e3] bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[#1a1a1a]">
+                        {req.title}
+                      </p>
+                      <p className="mt-1 text-xs text-[#9b9b9b]">
+                        Category: {req.category}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                        req.enforcement === "BLOCKING"
+                          ? "border-red-200 bg-red-50 text-red-700"
+                          : "border-blue-200 bg-blue-50 text-blue-700"
+                      }`}
+                    >
+                      {req.enforcement}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm text-[#6b6b6b]">{req.rule}</p>
+                  {req.tags?.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {req.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full border border-[#e8e6e3] bg-white px-2 py-0.5 text-xs text-[#6b6b6b]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {req.examples?.length ? (
+                    <div className="mt-3 text-xs text-[#9b9b9b]">
+                      Examples: {req.examples.join(" · ")}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
           )}
         </div>
