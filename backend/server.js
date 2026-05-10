@@ -34,6 +34,9 @@ const allowedOrigins = rawOrigins
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+// Explicitly allow the deployed Vercel frontend
+allowedOrigins.push("https://approval-workflow-management-system.vercel.app");
+
 if (isProd && allowedOrigins.length === 0) {
   throw new Error("FRONTEND_URL or FRONTEND_URLS must be set in production");
 }
