@@ -1,8 +1,12 @@
 {
+  "name": "approval-workflow-management-system",
   "version": 2,
   "framework": "vite",
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://approval-workflow-management-system-q7d5.onrender.com/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
