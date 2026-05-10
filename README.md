@@ -1,164 +1,98 @@
 # Approval Workflow Management System
 
-Full-stack approval system with JWT authentication, team-scoped request routing, AI-assisted request checks, revision workflow, requirement rules, and budget allocation/disbursement.
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![React](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB.svg)
+![Node.js](https://img.shields.io/badge/backend-Node.js%20%2B%20Express-339933.svg)
+![MongoDB](https://img.shields.io/badge/database-MongoDB-47A248.svg)
 
-## What It Does
+A full-stack approval management system featuring role-based access control, team-scoped request routing, automated validation, revision workflows, requirement rules, and budget tracking.
 
-- Users can register and log in as `CREATOR` or `APPROVER`.
-- Creators submit requests with category, priority, optional deadline, and optional requested amount.
-- Approvers review only requests in their team.
-- The backend runs auto-checks for duplicates and AI validation before a request becomes pending.
-- Approvers can approve, reject, or request changes.
-- Creators can resubmit revision-required requests.
-- Approved requests with funding are allocated to a team budget and can be marked disbursed.
-- Approvers can manage a requirements knowledge-base that guides AI validation.
+**Live Demo:** [https://approval-workflow-management-system.vercel.app](https://approval-workflow-management-system.vercel.app)
 
-## Tech Stack
+---
 
-### Backend
+## Key Features
 
-- Node.js, Express
-- MongoDB, Mongoose
-- JWT authentication
-- bcryptjs password hashing
-- OpenAI for request validation
+*   **Role-Based Access:** Dedicated interfaces for `CREATOR` and `APPROVER` roles.
+*   **Automated Checks:** Automated validation and duplicate detection before requests enter the pending queue.
+*   **Revision Workflows:** Approvers can request changes; creators can resubmit.
+*   **Budget Management:** Allocate funds to approved requests and track team disbursements.
+*   **Knowledge Base:** Maintain requirement rules that guide the validation engine.
+*   **Security:** JWT authentication, bcrypt password hashing, and rate limiting.
 
-### Frontend
+---
 
-- React 18
-- Vite
-- React Router v6
-- Axios
-- Tailwind CSS
+## Technology Stack
 
-## Repository Structure
+**Frontend**
+*   React 18
+*   Vite
+*   React Router v6
+*   Tailwind CSS
+*   Axios
 
-```
-backend/
-    config/
-    controllers/
-    middleware/
-    models/
-    routes/
-    services/
-    tests/
+**Backend**
+*   Node.js
+*   Express
+*   MongoDB / Mongoose
+*   JWT / bcryptjs
+*   OpenAI API
 
-frontend/
-    src/
-        components/
-        context/
-        hooks/
-        pages/
-        services/
-```
+---
 
-## Key Workflows
+## Getting Started Locally
 
-### Authentication
+### Prerequisites
+*   Node.js 18+
+*   MongoDB Atlas URI (or local MongoDB instance)
+*   OpenAI API Key
 
-- Register and login with role-based access control.
-- JWT is stored in `localStorage` under `fa_token`.
-- The user profile is stored in `localStorage` under `fa_user`.
-
-### Request Lifecycle
-
-- `PENDING`
-- `APPROVED`
-- `REJECTED`
-- `AUTO_REJECTED`
-- `REVISION_REQUIRED`
-
-### Budget Workflow
-
-- Requests can include an optional `requestedAmount`.
-- On approval, the backend allocates budget for the request.
-- Approvers can later mark the allocated budget as disbursed.
-- Team totals are tracked in the `Team` model and transaction history in `BudgetTransaction`.
-
-### Requirements Knowledge-Base
-
-- Approvers can create, update, activate, and deactivate requirement rules.
-- Creators can read active requirements for guidance.
-- The auto-check service includes active requirements in the AI prompt.
-
-## API Endpoints
-
-### Auth
-
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-
-### Requests
-
-- `POST /api/requests` for creators
-- `GET /api/requests/my-requests` for creators
-- `GET /api/requests/pending` for approvers
-- `GET /api/requests/reviewed` for approvers
-- `PUT /api/requests/:id/approve` for approvers
-- `PUT /api/requests/:id/reject` for approvers
-- `PUT /api/requests/:id/request-changes` for approvers
-- `PUT /api/requests/:id/resubmit` for creators
-- `PUT /api/requests/:id/disburse` for approvers
-- `PUT /api/requests/bulk-approve` for approvers
-- `GET /api/requests/auto-rejected` for approvers
-
-### Requirements
-
-- `GET /api/requirements`
-- `POST /api/requirements` for approvers
-- `PUT /api/requirements/:id` for approvers
-- `DELETE /api/requirements/:id` for approvers
-
-## Local Setup
-
-### Requirements
-
-- Node.js 18+
-- MongoDB Atlas URI or a local MongoDB instance
-
-### 1) Backend
+### 1. Backend Setup
 
 ```bash
 cd backend
 npm install
 ```
 
-Create `backend/.env`:
-
+Create a `.env` file in the `backend` directory:
 ```env
 MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret
 PORT=5000
 NODE_ENV=development
-FRONTEND_URL=http://localhost:3000
 OPENAI_API_KEY=your_openai_api_key
 ```
 
-Run the backend:
-
+Start the backend server:
 ```bash
 npm start
 ```
 
-### 2) Frontend
+### 2. Frontend Setup
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+*Note: The frontend uses `vite.config.js` to automatically proxy `/api` requests to the local backend on port 5000.*
 
-By default, the frontend runs on port 3000 and the backend runs on port 5000.
+---
 
-## Environment Notes
+## Repository Structure
 
-- The frontend uses `VITE_API_URL` when set, otherwise it falls back to `/api` and uses the Vite proxy.
-- The backend now mounts `/api/auth` correctly and applies the auth rate limiter only outside test runs.
-- If login fails in the browser, first confirm the backend is running on port 5000 and the frontend is pointing at the same API base URL.
+```
+├── backend/            # Express REST API, MongoDB models, integrations
+├── frontend/           # React 18, Vite, Tailwind CSS application
+└── render.yaml         # Blueprint for Render deployment
+```
 
-## Current Repo Notes
+---
 
-- The backend includes tests under `backend/tests/`.
-- The frontend dashboard pages support revision requests, budget display, and requirements browsing.
-- The repo no longer needs a root-level npm manifest for the app itself.
+## Deployment
+
+*   **Frontend:** Deployed via Vercel.
+*   **Backend:** Hosted on Render.
+
+To deploy the frontend to Vercel, connect the GitHub repository and set the Vercel Root Directory to `frontend`.
