@@ -30,9 +30,9 @@ exports.runAutoChecks = async (request, creatorUser) => {
 
   if (!process.env.OPENAI_API_KEY) {
     return {
-      passed: true,
-      status: "PASSED",
-      reason: "AI check skipped: OPENAI_API_KEY is not configured",
+      passed: false,
+      status: "AI_UNAVAILABLE",
+      reason: "AI check failed: OPENAI_API_KEY is not configured",
     };
   }
 
@@ -90,7 +90,16 @@ exports.runAutoChecks = async (request, creatorUser) => {
     });
 
     const content = response.choices?.[0]?.message?.content || "";
-    const parsed = JSON.parse(content);
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+      return {
+        passed: false,
+        status: "AI_UNAVAILABLE",
+        reason: "AI check failed: invalid response format",
+      };
+    }
 
     if (parsed.verdict === "REJECT") {
       return {
@@ -102,9 +111,9 @@ exports.runAutoChecks = async (request, creatorUser) => {
   } catch (error) {
     console.error("OpenAI auto-check failed:", error.message || error);
     return {
-      passed: true,
-      status: "PASSED",
-      reason: "AI check skipped: OpenAI request failed",
+      passed: false,
+      status: "AI_UNAVAILABLE",
+      reason: "AI check failed: OpenAI request failed",
     };
   }
 

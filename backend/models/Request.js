@@ -129,6 +129,7 @@ const requestSchema = new mongoose.Schema(
         "PASSED",
         "DUPLICATE",
         "AI_REJECTED",
+        "AI_UNAVAILABLE",
         "BUDGET_EXCEEDED",
       ],
       default: "PENDING_CHECK",
